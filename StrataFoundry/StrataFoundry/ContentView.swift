@@ -50,11 +50,16 @@ struct ContentView: View {
             panel.canChooseFiles = false
             panel.canChooseDirectories = true
             panel.allowsMultipleSelection = false
-            panel.message = "Select a .strata database directory"
+            panel.message = "Select the folder containing your .strata database"
 
             if panel.runModal() == .OK, let url = panel.url {
+                // If the user selected a directory containing .strata, use that.
+                // If the selected directory IS a .strata directory, use it directly.
+                let strataURL = url.lastPathComponent == ".strata"
+                    ? url
+                    : url.appendingPathComponent(".strata")
                 Task {
-                    await appState.openDatabase(at: url.path)
+                    await appState.openDatabase(at: strataURL.path)
                 }
             }
         }

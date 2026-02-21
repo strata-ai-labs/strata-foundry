@@ -7,14 +7,13 @@
 
 import SwiftUI
 
-enum SidebarItem: String, CaseIterable, Identifiable {
+enum SidebarItem: String, CaseIterable, Identifiable, Hashable {
     case info = "Database Info"
     case kv = "KV Store"
-    case events = "Event Log"
     case state = "State Cells"
+    case events = "Event Log"
     case json = "JSON Store"
     case vectors = "Vector Store"
-    case branches = "Branches"
 
     var id: String { rawValue }
 
@@ -22,23 +21,26 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         switch self {
         case .info: return "info.circle"
         case .kv: return "key"
-        case .events: return "list.bullet.clipboard"
         case .state: return "memorychip"
+        case .events: return "list.bullet.clipboard"
         case .json: return "doc.text"
         case .vectors: return "arrow.trianglehead.branch"
-        case .branches: return "arrow.triangle.branch"
         }
     }
 }
 
 struct DatabaseView: View {
     @Environment(AppState.self) private var appState
-    @State private var selectedItem: SidebarItem = .info
+    @State private var selectedItem: SidebarItem? = .info
 
     var body: some View {
+        @Bindable var appState = appState
         NavigationSplitView {
-            List(SidebarItem.allCases, selection: $selectedItem) { item in
-                Label(item.rawValue, systemImage: item.icon)
+            List(selection: $selectedItem) {
+                ForEach(SidebarItem.allCases) { item in
+                    Label(item.rawValue, systemImage: item.icon)
+                        .tag(item)
+                }
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 200)
             .toolbar(removing: .sidebarToggle)
@@ -48,16 +50,26 @@ struct DatabaseView: View {
                 DatabaseInfoView()
             case .kv:
                 KVStoreView()
-            case .events:
-                EventLogView()
             case .state:
                 StateCellsView()
+            case .events:
+                EventLogView()
             case .json:
                 JsonStoreView()
             case .vectors:
                 VectorStoreView()
-            case .branches:
-                BranchesView()
+            case nil:
+                DatabaseInfoView()
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Picker("Branch", selection: $appState.selectedBranch) {
+                    ForEach(appState.branches, id: \.self) { branch in
+                        Text(branch).tag(branch)
+                    }
+                }
+                .pickerStyle(.menu)
             }
         }
         .navigationTitle(appState.databaseName)

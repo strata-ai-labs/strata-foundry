@@ -188,97 +188,335 @@ mod tests {
         assert_eq!(s, r#"{"ok":"strata-foundry-bridge"}"#);
     }
 
-    /// Create a sample database at /tmp/strata-foundry-sample/.strata
-    /// with data across multiple primitives. Run with:
+    /// Debug: open the sample DB and print actual JSON responses.
+    #[test]
+    #[ignore]
+    fn debug_sample_db_responses() {
+        let path = "/Users/aniruddhajoshi/Documents/strata-foundry-sample/.strata";
+        let path_c = CString::new(path).unwrap();
+
+        let result_ptr = strata_open(path_c.as_ptr(), std::ptr::null());
+        let result = unsafe { CStr::from_ptr(result_ptr) }.to_str().unwrap().to_string();
+        unsafe { strata_free_string(result_ptr) };
+        println!("strata_open => {result}");
+
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        let handle_id = v["ok"].as_u64().expect(&format!("expected ok, got: {result}"));
+
+        let commands = [
+            ("Info", r#"{"Info":null}"#),
+            ("KvList", r#"{"KvList":{}}"#),
+            ("KvGet user:alice", r#"{"KvGet":{"key":"user:alice"}}"#),
+            ("StateList", r#"{"StateList":{}}"#),
+            ("EventLen", r#"{"EventLen":{}}"#),
+            ("EventGet seq=0", r#"{"EventGet":{"sequence":0}}"#),
+            ("EventGet seq=1", r#"{"EventGet":{"sequence":1}}"#),
+            ("JsonList", r#"{"JsonList":{"limit":1000}}"#),
+            ("BranchList", r#"{"BranchList":{}}"#),
+            ("VectorListCollections", r#"{"VectorListCollections":{}}"#),
+        ];
+
+        for (name, cmd) in commands {
+            let cmd_c = CString::new(cmd).unwrap();
+            let out_ptr = strata_execute(handle_id, cmd_c.as_ptr());
+            let out = unsafe { CStr::from_ptr(out_ptr) }.to_str().unwrap().to_string();
+            unsafe { strata_free_string(out_ptr) };
+            println!("\n{name}:\n  cmd: {cmd}\n  out: {out}");
+        }
+
+        strata_close(handle_id);
+    }
+
+    /// Create a sample database with realistic data.
+    /// Run with:
     ///   cargo test create_sample_db -- --nocapture --ignored
     #[test]
     #[ignore]
     fn create_sample_db() {
         use stratadb::{Strata, Value};
+        use std::collections::HashMap;
 
-        let path = "/tmp/strata-foundry-sample/.strata";
+        let path = std::env::var("STRATA_SAMPLE_PATH")
+            .unwrap_or_else(|_| "/Users/aniruddhajoshi/Documents/strata-foundry-sample/.strata".into());
 
         // Remove old sample if exists
-        let _ = std::fs::remove_dir_all(path);
+        let _ = std::fs::remove_dir_all(&path);
 
-        let db = Strata::open(path).expect("failed to create sample db");
+        let db = Strata::open(&path).expect("failed to create sample db");
 
-        // KV entries
-        db.kv_put("user:alice", Value::Object(
-            [("name".into(), Value::String("Alice".into())),
-             ("age".into(), Value::Int(30)),
-             ("active".into(), Value::Bool(true))]
-            .into_iter().collect()
-        )).unwrap();
-        db.kv_put("user:bob", Value::Object(
-            [("name".into(), Value::String("Bob".into())),
-             ("age".into(), Value::Int(25)),
-             ("active".into(), Value::Bool(false))]
-            .into_iter().collect()
-        )).unwrap();
-        db.kv_put("config:app", Value::String("v2.1.0".into())).unwrap();
-        db.kv_put("counter:visits", Value::Int(1042)).unwrap();
-        db.kv_put("features:flags", Value::Array(vec![
-            Value::String("dark-mode".into()),
-            Value::String("beta-search".into()),
-            Value::String("new-editor".into()),
+        // Helper to build objects
+        fn obj(pairs: Vec<(&str, Value)>) -> Value {
+            Value::Object(pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect::<HashMap<_, _>>())
+        }
+
+        // =====================================================================
+        // KV Store — 15 keys across several namespaces
+        // =====================================================================
+
+        // Users
+        db.kv_put("user:alice", obj(vec![
+            ("name", Value::String("Alice Chen".into())),
+            ("email", Value::String("alice@example.com".into())),
+            ("age", Value::Int(30)),
+            ("role", Value::String("admin".into())),
+            ("active", Value::Bool(true)),
+        ])).unwrap();
+        db.kv_put("user:bob", obj(vec![
+            ("name", Value::String("Bob Martinez".into())),
+            ("email", Value::String("bob@example.com".into())),
+            ("age", Value::Int(25)),
+            ("role", Value::String("developer".into())),
+            ("active", Value::Bool(true)),
+        ])).unwrap();
+        db.kv_put("user:carol", obj(vec![
+            ("name", Value::String("Carol Kim".into())),
+            ("email", Value::String("carol@example.com".into())),
+            ("age", Value::Int(35)),
+            ("role", Value::String("designer".into())),
+            ("active", Value::Bool(false)),
         ])).unwrap();
 
-        // State cells
-        db.state_set("agent_status", Value::String("idle".into())).unwrap();
-        db.state_set("step_count", Value::Int(0)).unwrap();
-        db.state_set("last_error", Value::Null).unwrap();
+        // Config
+        db.kv_put("config:app_version", Value::String("2.1.0".into())).unwrap();
+        db.kv_put("config:max_retries", Value::Int(3)).unwrap();
+        db.kv_put("config:timeout_ms", Value::Int(5000)).unwrap();
+        db.kv_put("config:debug_mode", Value::Bool(false)).unwrap();
+        db.kv_put("config:allowed_origins", Value::Array(vec![
+            Value::String("https://app.strata.dev".into()),
+            Value::String("https://localhost:3000".into()),
+            Value::String("https://staging.strata.dev".into()),
+        ])).unwrap();
 
-        // Events
-        db.event_append("startup", Value::Object(
-            [("version".into(), Value::String("1.0.0".into()))]
-            .into_iter().collect()
-        )).unwrap();
-        db.event_append("user_login", Value::Object(
-            [("user".into(), Value::String("alice".into()))]
-            .into_iter().collect()
-        )).unwrap();
-        db.event_append("query", Value::Object(
-            [("sql".into(), Value::String("SELECT * FROM users".into())),
-             ("duration_ms".into(), Value::Int(42))]
-            .into_iter().collect()
-        )).unwrap();
-        db.event_append("user_login", Value::Object(
-            [("user".into(), Value::String("bob".into()))]
-            .into_iter().collect()
-        )).unwrap();
-        db.event_append("error", Value::Object(
-            [("message".into(), Value::String("connection timeout".into())),
-             ("code".into(), Value::Int(504))]
-            .into_iter().collect()
-        )).unwrap();
+        // Counters
+        db.kv_put("counter:page_views", Value::Int(48291)).unwrap();
+        db.kv_put("counter:api_calls", Value::Int(152847)).unwrap();
+        db.kv_put("counter:errors", Value::Int(37)).unwrap();
 
-        // JSON documents
-        db.json_set("doc:readme", "$", Value::Object(
-            [("title".into(), Value::String("Getting Started".into())),
-             ("content".into(), Value::String("Welcome to Strata.".into())),
-             ("tags".into(), Value::Array(vec![
-                 Value::String("docs".into()),
-                 Value::String("intro".into()),
-             ]))]
-            .into_iter().collect()
-        )).unwrap();
-        db.json_set("doc:changelog", "$", Value::Object(
-            [("version".into(), Value::String("0.5.1".into())),
-             ("changes".into(), Value::Array(vec![
-                 Value::String("Added branch diffing".into()),
-                 Value::String("Fixed WAL compaction".into()),
-             ]))]
-            .into_iter().collect()
-        )).unwrap();
+        // Cache
+        db.kv_put("cache:trending_topics", Value::Array(vec![
+            Value::String("rust".into()),
+            Value::String("ai-agents".into()),
+            Value::String("embedded-databases".into()),
+            Value::String("swiftui".into()),
+        ])).unwrap();
+        db.kv_put("cache:exchange_rates", obj(vec![
+            ("USD_EUR", Value::Float(0.92)),
+            ("USD_GBP", Value::Float(0.79)),
+            ("USD_JPY", Value::Float(149.85)),
+            ("updated_at", Value::String("2026-02-20T15:00:00Z".into())),
+        ])).unwrap();
 
-        // Create a second branch
+        // Session
+        db.kv_put("session:abc123", obj(vec![
+            ("user_id", Value::String("alice".into())),
+            ("created_at", Value::String("2026-02-20T14:30:00Z".into())),
+            ("expires_at", Value::String("2026-02-21T14:30:00Z".into())),
+            ("ip", Value::String("192.168.1.42".into())),
+        ])).unwrap();
+
+        // =====================================================================
+        // State Cells — 8 cells tracking agent state
+        // =====================================================================
+
+        db.state_set("agent:status", Value::String("idle".into())).unwrap();
+        db.state_set("agent:step_count", Value::Int(47)).unwrap();
+        db.state_set("agent:last_action", Value::String("tool_call: search_docs".into())).unwrap();
+        db.state_set("agent:memory_mb", Value::Float(128.5)).unwrap();
+        db.state_set("agent:errors_total", Value::Int(2)).unwrap();
+        db.state_set("agent:last_error", obj(vec![
+            ("message", Value::String("API rate limit exceeded".into())),
+            ("code", Value::Int(429)),
+            ("timestamp", Value::String("2026-02-20T14:28:00Z".into())),
+        ])).unwrap();
+        db.state_set("pipeline:stage", Value::String("indexing".into())).unwrap();
+        db.state_set("pipeline:progress", Value::Float(0.73)).unwrap();
+
+        // =====================================================================
+        // Event Log — 20 events simulating an agent run
+        // =====================================================================
+
+        db.event_append("system", obj(vec![
+            ("action", Value::String("startup".into())),
+            ("version", Value::String("1.0.0".into())),
+        ])).unwrap();
+        db.event_append("auth", obj(vec![
+            ("action", Value::String("login".into())),
+            ("user", Value::String("alice".into())),
+            ("method", Value::String("api_key".into())),
+        ])).unwrap();
+        db.event_append("tool_call", obj(vec![
+            ("tool", Value::String("web_search".into())),
+            ("query", Value::String("rust embedded database benchmarks".into())),
+            ("duration_ms", Value::Int(342)),
+            ("results", Value::Int(15)),
+        ])).unwrap();
+        db.event_append("observation", obj(vec![
+            ("content", Value::String("Found 15 results about embedded databases. Top result: StrataDB benchmarks show 2.3x improvement.".into())),
+        ])).unwrap();
+        db.event_append("decision", obj(vec![
+            ("reasoning", Value::String("Results look promising. Will summarize the top 3 findings.".into())),
+            ("confidence", Value::Float(0.85)),
+        ])).unwrap();
+        db.event_append("tool_call", obj(vec![
+            ("tool", Value::String("read_document".into())),
+            ("doc_id", Value::String("benchmark-report-2026".into())),
+            ("duration_ms", Value::Int(89)),
+        ])).unwrap();
+        db.event_append("tool_call", obj(vec![
+            ("tool", Value::String("read_document".into())),
+            ("doc_id", Value::String("stratadb-architecture".into())),
+            ("duration_ms", Value::Int(124)),
+        ])).unwrap();
+        db.event_append("observation", obj(vec![
+            ("content", Value::String("Architecture doc describes 6 primitives: KV, Events, State, JSON, Vectors, Branches.".into())),
+        ])).unwrap();
+        db.event_append("tool_call", obj(vec![
+            ("tool", Value::String("kv_put".into())),
+            ("key", Value::String("cache:summary".into())),
+            ("duration_ms", Value::Int(3)),
+        ])).unwrap();
+        db.event_append("error", obj(vec![
+            ("message", Value::String("Rate limit exceeded for web_search".into())),
+            ("code", Value::Int(429)),
+            ("retry_after_ms", Value::Int(5000)),
+        ])).unwrap();
+        db.event_append("system", obj(vec![
+            ("action", Value::String("rate_limit_backoff".into())),
+            ("wait_ms", Value::Int(5000)),
+        ])).unwrap();
+        db.event_append("tool_call", obj(vec![
+            ("tool", Value::String("web_search".into())),
+            ("query", Value::String("strata vs redb vs sqlite comparison".into())),
+            ("duration_ms", Value::Int(567)),
+            ("results", Value::Int(8)),
+        ])).unwrap();
+        db.event_append("observation", obj(vec![
+            ("content", Value::String("Comparison shows StrataDB excels at branching and time-travel. SQLite wins on raw read throughput.".into())),
+        ])).unwrap();
+        db.event_append("decision", obj(vec![
+            ("reasoning", Value::String("Have enough data to write the summary. Will generate report.".into())),
+            ("confidence", Value::Float(0.92)),
+        ])).unwrap();
+        db.event_append("tool_call", obj(vec![
+            ("tool", Value::String("generate_text".into())),
+            ("prompt_tokens", Value::Int(2048)),
+            ("completion_tokens", Value::Int(512)),
+            ("duration_ms", Value::Int(1843)),
+        ])).unwrap();
+        db.event_append("tool_call", obj(vec![
+            ("tool", Value::String("json_set".into())),
+            ("key", Value::String("doc:report".into())),
+            ("duration_ms", Value::Int(5)),
+        ])).unwrap();
+        db.event_append("auth", obj(vec![
+            ("action", Value::String("login".into())),
+            ("user", Value::String("bob".into())),
+            ("method", Value::String("oauth".into())),
+        ])).unwrap();
+        db.event_append("tool_call", obj(vec![
+            ("tool", Value::String("kv_list".into())),
+            ("prefix", Value::String("user:".into())),
+            ("duration_ms", Value::Int(2)),
+            ("results", Value::Int(3)),
+        ])).unwrap();
+        db.event_append("system", obj(vec![
+            ("action", Value::String("checkpoint".into())),
+            ("step", Value::Int(47)),
+        ])).unwrap();
+        db.event_append("system", obj(vec![
+            ("action", Value::String("task_complete".into())),
+            ("total_steps", Value::Int(47)),
+            ("total_tool_calls", Value::Int(8)),
+            ("total_tokens", Value::Int(4096)),
+        ])).unwrap();
+
+        // =====================================================================
+        // JSON Store — 4 documents
+        // =====================================================================
+
+        db.json_set("doc:readme", "$", obj(vec![
+            ("title", Value::String("Getting Started with StrataDB".into())),
+            ("author", Value::String("Alice Chen".into())),
+            ("created", Value::String("2026-01-15T10:00:00Z".into())),
+            ("content", Value::String("StrataDB is an embedded database built for AI agents. It provides six data primitives, git-like branching, time-travel queries, and optimistic concurrency control.".into())),
+            ("tags", Value::Array(vec![
+                Value::String("docs".into()),
+                Value::String("getting-started".into()),
+                Value::String("tutorial".into()),
+            ])),
+            ("status", Value::String("published".into())),
+        ])).unwrap();
+
+        db.json_set("doc:changelog", "$", obj(vec![
+            ("version", Value::String("0.5.1".into())),
+            ("date", Value::String("2026-02-18".into())),
+            ("changes", Value::Array(vec![
+                obj(vec![
+                    ("type", Value::String("feature".into())),
+                    ("description", Value::String("Added branch diff and merge support".into())),
+                ]),
+                obj(vec![
+                    ("type", Value::String("fix".into())),
+                    ("description", Value::String("Fixed WAL compaction causing data loss on crash".into())),
+                ]),
+                obj(vec![
+                    ("type", Value::String("perf".into())),
+                    ("description", Value::String("2.3x faster vector search with HNSW segment compaction".into())),
+                ]),
+                obj(vec![
+                    ("type", Value::String("fix".into())),
+                    ("description", Value::String("OCC conflict detection now handles cross-branch reads".into())),
+                ]),
+            ])),
+            ("breaking_changes", Value::Bool(false)),
+        ])).unwrap();
+
+        db.json_set("doc:agent-config", "$", obj(vec![
+            ("name", Value::String("research-agent-v2".into())),
+            ("model", Value::String("claude-sonnet-4-6".into())),
+            ("max_steps", Value::Int(100)),
+            ("tools", Value::Array(vec![
+                Value::String("web_search".into()),
+                Value::String("read_document".into()),
+                Value::String("generate_text".into()),
+                Value::String("kv_put".into()),
+                Value::String("kv_get".into()),
+                Value::String("json_set".into()),
+            ])),
+            ("temperature", Value::Float(0.7)),
+            ("system_prompt", Value::String("You are a research assistant. Find information, analyze it, and produce structured reports.".into())),
+        ])).unwrap();
+
+        db.json_set("doc:report", "$", obj(vec![
+            ("title", Value::String("Embedded Database Comparison 2026".into())),
+            ("author", Value::String("research-agent-v2".into())),
+            ("generated_at", Value::String("2026-02-20T15:30:00Z".into())),
+            ("summary", Value::String("Analysis of 5 embedded databases across 12 benchmarks. StrataDB leads in branching, time-travel, and hybrid search. SQLite leads in raw read throughput. redb leads in write-heavy workloads.".into())),
+            ("databases", Value::Array(vec![
+                Value::String("StrataDB".into()),
+                Value::String("SQLite".into()),
+                Value::String("redb".into()),
+                Value::String("LMDB".into()),
+                Value::String("RocksDB".into()),
+            ])),
+            ("recommendation", Value::String("StrataDB recommended for AI agent workloads due to native branching and vector search.".into())),
+        ])).unwrap();
+
+        // =====================================================================
+        // Branches — 3 total
+        // =====================================================================
+
         db.create_branch("experiment").unwrap();
+        db.create_branch("staging").unwrap();
 
         // Flush to disk
         db.flush().unwrap();
 
         println!("Sample database created at: {path}");
-        println!("Open it in Strata Foundry with File > Open Database");
+        println!("  KV: 15 keys (user:*, config:*, counter:*, cache:*, session:*)");
+        println!("  State: 8 cells (agent:*, pipeline:*)");
+        println!("  Events: 20 entries (system, auth, tool_call, observation, decision, error)");
+        println!("  JSON: 4 documents (readme, changelog, agent-config, report)");
+        println!("  Branches: 3 (default, experiment, staging)");
     }
 }

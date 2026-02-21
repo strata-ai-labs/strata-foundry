@@ -27,6 +27,12 @@ final class AppState {
     /// Error to display.
     var errorMessage: String?
 
+    /// Currently selected branch.
+    var selectedBranch: String = "default"
+
+    /// List of branch names in the open database.
+    var branches: [String] = []
+
     /// Whether a database is currently open.
     var isOpen: Bool { client?.isOpen ?? false }
 
@@ -49,6 +55,7 @@ final class AppState {
             client = newClient
             databasePath = path
             await refreshInfo()
+            await loadBranches()
         } catch {
             errorMessage = "Failed to open database: \(error.localizedDescription)"
         }
@@ -65,6 +72,7 @@ final class AppState {
             client = newClient
             databasePath = path
             await refreshInfo()
+            await loadBranches()
         } catch {
             errorMessage = "Failed to create database: \(error.localizedDescription)"
         }
@@ -76,6 +84,27 @@ final class AppState {
         client = nil
         databasePath = nil
         databaseInfo = nil
+        selectedBranch = "default"
+        branches = []
+    }
+
+    /// Load the list of branch names from the database.
+    func loadBranches() async {
+        guard let client else { return }
+        do {
+            let json = try await client.executeRaw(#"{"BranchList": {}}"#)
+            guard let data = json.data(using: .utf8),
+                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let list = root["BranchInfoList"] as? [[String: Any]] else {
+                branches = []
+                return
+            }
+            branches = list.compactMap { item in
+                (item["info"] as? [String: Any])?["id"] as? String
+            }
+        } catch {
+            errorMessage = "Failed to load branches: \(error.localizedDescription)"
+        }
     }
 
     /// Refresh database info.

@@ -6,7 +6,7 @@
 import SwiftUI
 
 struct StateCellEntry: Identifiable {
-    let id: String  // cell name
+    let id: String
     let name: String
     let value: String
     let valueType: String
@@ -26,6 +26,8 @@ struct StateCellsView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
                 Spacer()
+                Text("\(cells.count) cells")
+                    .foregroundStyle(.secondary)
                 Button {
                     Task { await loadCells() }
                 } label: {
@@ -57,21 +59,30 @@ struct StateCellsView: View {
                 }
                 Spacer()
             } else {
-                Table(cells) {
-                    TableColumn("Cell", value: \.name)
-                        .width(min: 120, ideal: 200)
-                    TableColumn("Value", value: \.value)
-                        .width(min: 200, ideal: 400)
-                    TableColumn("Type", value: \.valueType)
-                        .width(min: 60, ideal: 80)
-                    TableColumn("Version") { cell in
-                        Text("\(cell.version)")
+                List(cells) { cell in
+                    HStack(spacing: 12) {
+                        Text(cell.name)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minWidth: 180, alignment: .leading)
+                        Text(cell.value)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(cell.valueType)
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.quaternary)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                        Text("v\(cell.version)")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     }
-                    .width(min: 60, ideal: 80)
                 }
             }
         }
-        .task {
+        .task(id: appState.selectedBranch) {
             await loadCells()
         }
     }
@@ -83,7 +94,7 @@ struct StateCellsView: View {
         defer { isLoading = false }
 
         do {
-            let listJSON = try await client.executeRaw(#"{"StateList": {}}"#)
+            let listJSON = try await client.executeRaw(#"{"StateList": {"branch": "\#(appState.selectedBranch)"}}"#)
             guard let data = listJSON.data(using: .utf8),
                   let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let keys = root["Keys"] as? [String] else {
@@ -93,18 +104,16 @@ struct StateCellsView: View {
 
             var newCells: [StateCellEntry] = []
             for name in keys {
-                let cmdData = try JSONSerialization.data(withJSONObject: ["StateGet": ["cell": name]])
-                let cmdStr = String(data: cmdData, encoding: .utf8)!
-                let getJSON = try await client.executeRaw(cmdStr)
-
-                if let getData = getJSON.data(using: .utf8),
-                   let getRoot = try? JSONSerialization.jsonObject(with: getData) as? [String: Any],
-                   let versioned = getRoot["MaybeVersioned"] as? [String: Any] {
-                    let version = versioned["version"] as? UInt64 ?? 0
-                    let (display, valueType) = formatValue(versioned["value"])
+                let cmd = "{\"StateGet\": {\"cell\": \"\(name)\", \"branch\": \"\(appState.selectedBranch)\"}}"
+                let getJSON = try await client.executeRaw(cmd)
+                if let d = getJSON.data(using: .utf8),
+                   let r = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+                   let v = r["MaybeVersioned"] as? [String: Any] {
+                    let ver = v["version"] as? UInt64 ?? 0
+                    let (display, vType) = formatValue(v["value"])
                     newCells.append(StateCellEntry(
                         id: name, name: name, value: display,
-                        valueType: valueType, version: version
+                        valueType: vType, version: ver
                     ))
                 }
             }

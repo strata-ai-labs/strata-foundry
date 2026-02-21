@@ -20,6 +20,8 @@ struct JsonStoreView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
                 Spacer()
+                Text("\(keys.count) documents")
+                    .foregroundStyle(.secondary)
                 Button {
                     Task { await loadKeys() }
                 } label: {
@@ -52,14 +54,12 @@ struct JsonStoreView: View {
                 Spacer()
             } else {
                 HSplitView {
-                    // Document list
                     List(keys, id: \.self, selection: $selectedKey) { key in
                         Text(key)
                             .font(.system(.body, design: .monospaced))
                     }
                     .frame(minWidth: 150, idealWidth: 200)
 
-                    // Document content
                     ScrollView {
                         if documentJSON.isEmpty {
                             Text("Select a document")
@@ -76,7 +76,7 @@ struct JsonStoreView: View {
                 }
             }
         }
-        .task {
+        .task(id: appState.selectedBranch) {
             await loadKeys()
         }
         .onChange(of: selectedKey) { _, newKey in
@@ -93,7 +93,7 @@ struct JsonStoreView: View {
         defer { isLoading = false }
 
         do {
-            let json = try await client.executeRaw(#"{"JsonList": {}}"#)
+            let json = try await client.executeRaw(#"{"JsonList": {"limit": 1000, "branch": "\#(appState.selectedBranch)"}}"#)
             if let data = json.data(using: .utf8),
                let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let result = root["JsonListResult"] as? [String: Any],
@@ -110,14 +110,13 @@ struct JsonStoreView: View {
     private func loadDocument(key: String) async {
         guard let client = appState.client else { return }
         do {
-            let cmdData = try JSONSerialization.data(withJSONObject: ["JsonGet": ["key": key]])
-            let cmdStr = String(data: cmdData, encoding: .utf8)!
-            let json = try await client.executeRaw(cmdStr)
+            let cmd = "{\"JsonGet\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"}}"
+            let json = try await client.executeRaw(cmd)
 
             // Pretty print
             if let data = json.data(using: .utf8),
                let obj = try? JSONSerialization.jsonObject(with: data),
-               let pretty = try? JSONSerialization.data(withJSONObject: obj, options: .prettyPrinted),
+               let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
                let str = String(data: pretty, encoding: .utf8) {
                 documentJSON = str
             } else {

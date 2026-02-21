@@ -69,7 +69,7 @@ struct VectorStoreView: View {
                 }
             }
         }
-        .task {
+        .task(id: appState.selectedBranch) {
             await loadCollections()
         }
     }
@@ -81,7 +81,7 @@ struct VectorStoreView: View {
         defer { isLoading = false }
 
         do {
-            let json = try await client.executeRaw(#"{"VectorListCollections": {}}"#)
+            let json = try await client.executeRaw(#"{"VectorListCollections": {"branch": "\#(appState.selectedBranch)"}}"#)
             guard let data = json.data(using: .utf8),
                   let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let list = root["VectorCollectionList"] as? [[String: Any]] else {

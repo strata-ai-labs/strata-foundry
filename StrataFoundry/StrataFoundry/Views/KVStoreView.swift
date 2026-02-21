@@ -2,13 +2,11 @@
 //  KVStoreView.swift
 //  StrataFoundry
 //
-//  Table view of KV store contents.
-//
 
 import SwiftUI
 
 struct KVEntry: Identifiable {
-    let id: String  // the key
+    let id: String
     let key: String
     let value: String
     let valueType: String
@@ -23,26 +21,22 @@ struct KVStoreView: View {
     @State private var filterText = ""
 
     private var filteredEntries: [KVEntry] {
-        if filterText.isEmpty {
-            return entries
-        }
+        if filterText.isEmpty { return entries }
         return entries.filter { $0.key.localizedCaseInsensitiveContains(filterText) }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Toolbar
             HStack {
                 Text("KV Store")
                     .font(.title2)
                     .fontWeight(.semibold)
-
                 Spacer()
-
-                TextField("Filter keys...", text: $filterText)
+                Text("\(filteredEntries.count) keys")
+                    .foregroundStyle(.secondary)
+                TextField("Filter...", text: $filterText)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 200)
-
                 Button {
                     Task { await loadEntries() }
                 } label: {
@@ -55,15 +49,13 @@ struct KVStoreView: View {
 
             Divider()
 
-            // Content
             if isLoading {
                 Spacer()
                 ProgressView("Loading keys...")
                 Spacer()
             } else if let error = errorMessage {
                 Spacer()
-                Text(error)
-                    .foregroundStyle(.red)
+                Text(error).foregroundStyle(.red).padding()
                 Spacer()
             } else if entries.isEmpty {
                 Spacer()
@@ -76,21 +68,30 @@ struct KVStoreView: View {
                 }
                 Spacer()
             } else {
-                Table(filteredEntries) {
-                    TableColumn("Key", value: \.key)
-                        .width(min: 120, ideal: 200)
-                    TableColumn("Value", value: \.value)
-                        .width(min: 200, ideal: 400)
-                    TableColumn("Type", value: \.valueType)
-                        .width(min: 60, ideal: 80)
-                    TableColumn("Version") { entry in
-                        Text("\(entry.version)")
+                List(filteredEntries) { entry in
+                    HStack(spacing: 12) {
+                        Text(entry.key)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minWidth: 180, alignment: .leading)
+                        Text(entry.value)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(entry.valueType)
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.quaternary)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                        Text("v\(entry.version)")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     }
-                    .width(min: 60, ideal: 80)
                 }
             }
         }
-        .task {
+        .task(id: appState.selectedBranch) {
             await loadEntries()
         }
     }
@@ -102,103 +103,53 @@ struct KVStoreView: View {
         defer { isLoading = false }
 
         do {
-            // Step 1: List all keys
-            let listJSON = try await client.executeRaw(#"{"KvList": {}}"#)
-            guard let keys = parseKeys(from: listJSON) else {
+            let listJSON = try await client.executeRaw(#"{"KvList": {"branch": "\#(appState.selectedBranch)"}}"#)
+            guard let data = listJSON.data(using: .utf8),
+                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let keys = root["Keys"] as? [String] else {
                 entries = []
                 return
             }
 
-            // Step 2: Get each key's value
             var newEntries: [KVEntry] = []
             for key in keys {
-                let getCmd = try jsonString(["KvGet": ["key": key]])
-                let getJSON = try await client.executeRaw(getCmd)
-                if let entry = parseKVEntry(key: key, from: getJSON) {
-                    newEntries.append(entry)
+                let cmd = "{\"KvGet\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"}}"
+                let getJSON = try await client.executeRaw(cmd)
+                if let d = getJSON.data(using: .utf8),
+                   let r = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+                   let v = r["MaybeVersioned"] as? [String: Any] {
+                    let ver = v["version"] as? UInt64 ?? 0
+                    let (display, vType) = formatStrataValue(v["value"])
+                    newEntries.append(KVEntry(id: key, key: key, value: display, valueType: vType, version: ver))
                 }
             }
-
             entries = newEntries
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    // MARK: - JSON Parsing Helpers
-
-    private func parseKeys(from json: String) -> [String]? {
-        guard let data = json.data(using: .utf8),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let keys = root["Keys"] as? [String] else {
-            return nil
-        }
-        return keys
-    }
-
-    private func parseKVEntry(key: String, from json: String) -> KVEntry? {
-        guard let data = json.data(using: .utf8),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let versioned = root["MaybeVersioned"] as? [String: Any] else {
-            return nil
-        }
-        let version = versioned["version"] as? UInt64 ?? 0
-        let rawValue = versioned["value"]
-        let (display, valueType) = formatStrataValue(rawValue)
-
-        return KVEntry(
-            id: key,
-            key: key,
-            value: display,
-            valueType: valueType,
-            version: version
-        )
-    }
-
     private func formatStrataValue(_ value: Any?) -> (String, String) {
         guard let value else { return ("null", "Null") }
-
-        // Strata values are externally tagged: {"String": "hello"}, {"Int": 42}, etc.
-        if let str = value as? String {
-            // "Null" comes as a plain string
-            return (str, "Null")
-        }
-
+        if let str = value as? String { return (str, "Null") }
         if let dict = value as? [String: Any], let (tag, inner) = dict.first {
             switch tag {
-            case "String":
-                return ("\"\(inner)\"", "String")
-            case "Int":
-                return ("\(inner)", "Int")
-            case "Float":
-                return ("\(inner)", "Float")
-            case "Bool":
-                return ("\(inner)", "Bool")
+            case "String": return ("\"\(inner)\"", "String")
+            case "Int": return ("\(inner)", "Int")
+            case "Float": return ("\(inner)", "Float")
+            case "Bool": return ("\(inner)", "Bool")
             case "Bytes":
-                if let arr = inner as? [Any] {
-                    return ("[\(arr.count) bytes]", "Bytes")
-                }
+                if let arr = inner as? [Any] { return ("[\(arr.count) bytes]", "Bytes") }
                 return ("\(inner)", "Bytes")
             case "Array":
-                if let arr = inner as? [Any] {
-                    return ("[\(arr.count) items]", "Array")
-                }
+                if let arr = inner as? [Any] { return ("[\(arr.count) items]", "Array") }
                 return ("\(inner)", "Array")
             case "Object":
-                if let obj = inner as? [String: Any] {
-                    return ("{\(obj.count) keys}", "Object")
-                }
+                if let obj = inner as? [String: Any] { return ("{\(obj.count) keys}", "Object") }
                 return ("\(inner)", "Object")
-            default:
-                return ("\(inner)", tag)
+            default: return ("\(inner)", tag)
             }
         }
-
         return ("\(value)", "?")
-    }
-
-    private func jsonString(_ obj: Any) throws -> String {
-        let data = try JSONSerialization.data(withJSONObject: obj)
-        return String(data: data, encoding: .utf8)!
     }
 }
