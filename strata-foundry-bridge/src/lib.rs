@@ -187,4 +187,98 @@ mod tests {
         unsafe { strata_free_string(ptr) };
         assert_eq!(s, r#"{"ok":"strata-foundry-bridge"}"#);
     }
+
+    /// Create a sample database at /tmp/strata-foundry-sample/.strata
+    /// with data across multiple primitives. Run with:
+    ///   cargo test create_sample_db -- --nocapture --ignored
+    #[test]
+    #[ignore]
+    fn create_sample_db() {
+        use stratadb::{Strata, Value};
+
+        let path = "/tmp/strata-foundry-sample/.strata";
+
+        // Remove old sample if exists
+        let _ = std::fs::remove_dir_all(path);
+
+        let db = Strata::open(path).expect("failed to create sample db");
+
+        // KV entries
+        db.kv_put("user:alice", Value::Object(
+            [("name".into(), Value::String("Alice".into())),
+             ("age".into(), Value::Int(30)),
+             ("active".into(), Value::Bool(true))]
+            .into_iter().collect()
+        )).unwrap();
+        db.kv_put("user:bob", Value::Object(
+            [("name".into(), Value::String("Bob".into())),
+             ("age".into(), Value::Int(25)),
+             ("active".into(), Value::Bool(false))]
+            .into_iter().collect()
+        )).unwrap();
+        db.kv_put("config:app", Value::String("v2.1.0".into())).unwrap();
+        db.kv_put("counter:visits", Value::Int(1042)).unwrap();
+        db.kv_put("features:flags", Value::Array(vec![
+            Value::String("dark-mode".into()),
+            Value::String("beta-search".into()),
+            Value::String("new-editor".into()),
+        ])).unwrap();
+
+        // State cells
+        db.state_set("agent_status", Value::String("idle".into())).unwrap();
+        db.state_set("step_count", Value::Int(0)).unwrap();
+        db.state_set("last_error", Value::Null).unwrap();
+
+        // Events
+        db.event_append("startup", Value::Object(
+            [("version".into(), Value::String("1.0.0".into()))]
+            .into_iter().collect()
+        )).unwrap();
+        db.event_append("user_login", Value::Object(
+            [("user".into(), Value::String("alice".into()))]
+            .into_iter().collect()
+        )).unwrap();
+        db.event_append("query", Value::Object(
+            [("sql".into(), Value::String("SELECT * FROM users".into())),
+             ("duration_ms".into(), Value::Int(42))]
+            .into_iter().collect()
+        )).unwrap();
+        db.event_append("user_login", Value::Object(
+            [("user".into(), Value::String("bob".into()))]
+            .into_iter().collect()
+        )).unwrap();
+        db.event_append("error", Value::Object(
+            [("message".into(), Value::String("connection timeout".into())),
+             ("code".into(), Value::Int(504))]
+            .into_iter().collect()
+        )).unwrap();
+
+        // JSON documents
+        db.json_set("doc:readme", "$", Value::Object(
+            [("title".into(), Value::String("Getting Started".into())),
+             ("content".into(), Value::String("Welcome to Strata.".into())),
+             ("tags".into(), Value::Array(vec![
+                 Value::String("docs".into()),
+                 Value::String("intro".into()),
+             ]))]
+            .into_iter().collect()
+        )).unwrap();
+        db.json_set("doc:changelog", "$", Value::Object(
+            [("version".into(), Value::String("0.5.1".into())),
+             ("changes".into(), Value::Array(vec![
+                 Value::String("Added branch diffing".into()),
+                 Value::String("Fixed WAL compaction".into()),
+             ]))]
+            .into_iter().collect()
+        )).unwrap();
+
+        // Create a second branch
+        db.create_branch("experiment").unwrap();
+
+        // Flush to disk
+        db.flush().unwrap();
+
+        println!("Sample database created at: {path}");
+        println!("Open it in Strata Foundry with File > Open Database");
+    }
 }

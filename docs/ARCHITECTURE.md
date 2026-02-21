@@ -6,7 +6,7 @@ Strata Foundry is a native macOS SwiftUI application that wraps StrataDB (a Rust
 
 1. **Rust Bridge** — C-ABI dynamic library that wraps `stratadb`
 2. **Swift FFI Layer** — Swift declarations and async wrappers over the C-ABI
-3. **Claude Data Pipeline** — Anthropic API integration with tool execution
+3. **Strata Assistant Pipeline** — Anthropic API integration with tool execution
 
 ## 2. Rust Bridge Crate (`strata-foundry-bridge`)
 
@@ -421,7 +421,7 @@ enum StrataError: Error, Decodable {
 }
 ```
 
-## 4. Claude Data Pipeline
+## 4. Strata Assistant Pipeline
 
 ### 4.1 Architecture
 
@@ -663,7 +663,7 @@ struct Conversation {
         visiblePanels: [PanelModel]
     ) -> String {
         """
-        You are Claude Data, an AI assistant embedded in Strata Foundry. \
+        You are Strata Assistant, an AI assistant embedded in Strata Foundry. \
         You have access to a StrataDB database and can execute any database \
         command as a tool call.
 
@@ -719,7 +719,7 @@ final class DatabaseDocument: ObservableObject {
     // Database connection
     let client: StrataClient
 
-    // Claude Data (nil if no API key)
+    // Strata Assistant (nil if no API key)
     var claude: ClaudeClient?
 
     // Current context
@@ -953,7 +953,7 @@ DMG packaging:
 
 These are deferred for future design rounds:
 
-1. **Streaming tool results** — Should Claude Data stream partial results as tool calls execute, or wait for all tools to complete? Streaming provides better UX for slow operations but complicates the tool-use loop.
+1. **Streaming tool results** — Should Strata Assistant stream partial results as tool calls execute, or wait for all tools to complete? Streaming provides better UX for slow operations but complicates the tool-use loop.
 
 2. **Conversation persistence** — Should conversation history persist across app launches? If so, stored where (in the Strata database itself, or a separate app-local store)?
 
@@ -961,7 +961,7 @@ These are deferred for future design rounds:
 
 4. **Offline tool execution** — The `/` command bar works without an API key. Should there be a richer command palette UI for users without API keys?
 
-5. **Model selection** — Should users be able to choose the Claude model (Opus/Sonnet/Haiku) for Claude Data? Cost vs capability tradeoff.
+5. **Model selection** — Should users be able to choose the Claude model (Opus/Sonnet/Haiku) for Strata Assistant? Cost vs capability tradeoff.
 
 6. **Rate limiting** — How to handle Anthropic API rate limits gracefully in the UI?
 

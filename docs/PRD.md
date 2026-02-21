@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-Strata Foundry is a native macOS application for interacting with StrataDB databases through an AI-native interface. It combines a **conversational AI assistant (Claude Data)** with an **interactive visual workspace** — replacing traditional database browser navigation with a unified experience where you talk to your data and see the results rendered as interactive panels.
+Strata Foundry is a native macOS application for interacting with StrataDB databases through an AI-native interface. It combines a **conversational AI assistant (Strata Assistant)** with an **interactive visual workspace** — replacing traditional database browser navigation with a unified experience where you talk to your data and see the results rendered as interactive panels.
 
 This is not "TablePlus for StrataDB." It is closer to **"Claude Code for data"** — a conversational interface backed by the Anthropic API that can execute any of Strata's 60 database commands as tool calls, with results rendered as rich, interactive visual panels that you can also manipulate directly.
 
@@ -10,7 +10,7 @@ This is not "TablePlus for StrataDB." It is closer to **"Claude Code for data"**
 
 **Workspace** — A canvas of interactive panels (tables, diffs, JSON trees, search results, charts) with a conversation bar at the bottom. You type questions or commands, panels appear on the canvas. You click and edit panels directly. This is the default mode — where you monitor, browse, and work with your data.
 
-**Focus** — A full-screen conversational thread with Claude Data, with rich inline artifacts. For deep investigation, complex multi-step analysis, and having Claude walk you through what happened in the database. Focus is the expanded view of the same conversation thread from the Workspace bar.
+**Focus** — A full-screen conversational thread with Strata Assistant, with rich inline artifacts. For deep investigation, complex multi-step analysis, and having Claude walk you through what happened in the database. Focus is the expanded view of the same conversation thread from the Workspace bar.
 
 ### Why native macOS?
 
@@ -68,17 +68,17 @@ Every write produces a monotonically increasing version number. Every read opera
 
 OCC (Optimistic Concurrency Control) — begin, read/write, commit or rollback. Transactions provide snapshot isolation. Vector writes and branch lifecycle operations bypass transactions by design.
 
-## 4. Claude Data — The Conversational Interface
+## 4. Strata Assistant — The Conversational Interface
 
-### 4.1 What Is Claude Data?
+### 4.1 What Is Strata Assistant?
 
-Claude Data is a conversational AI assistant embedded in Strata Foundry, powered by the Anthropic API. It has access to all of Strata's database operations as tools and can execute them on behalf of the user. It is the primary way users interact with the database.
+Strata Assistant is a conversational AI assistant embedded in Strata Foundry, powered by the Anthropic API. It has access to all of Strata's database operations as tools and can execute them on behalf of the user. It is the primary way users interact with the database.
 
 Think of it as Claude Code, but instead of tools for reading/editing files and running shell commands, the tools are `kv_put`, `kv_get`, `branch_fork`, `vector_search`, `event_append`, `search`, `diff`, and so on — the full set of 60 Strata commands.
 
 ### 4.2 Tool Set
 
-Claude Data has access to every Strata command as a tool call. The tools map directly to the `Command` enum in strata-executor:
+Strata Assistant has access to every Strata command as a tool call. The tools map directly to the `Command` enum in strata-executor:
 
 **Data operations:** KV (put, get, delete, list, batch_put, history), JSON (set, get, delete, list, batch_set, history), Event (append, get, get_by_type, count, batch_append), State (set, get, cas, init, delete, list, history, batch_set), Vector (upsert, get, delete, search, create_collection, drop_collection, list_collections, stats, batch_upsert)
 
@@ -92,7 +92,7 @@ Claude Data has access to every Strata command as a tool call. The tools map dir
 
 **Intelligence operations:** search (cross-primitive hybrid), configure_model
 
-All tools execute in the context of the current branch and space, which Claude Data can also switch.
+All tools execute in the context of the current branch and space, which Strata Assistant can also switch.
 
 ### 4.3 How It Works
 
@@ -109,12 +109,12 @@ All tools execute in the context of the current branch and space, which Claude D
 ```
 User: "Open ~/projects/my-agent/.strata"
 
-Claude Data: [executes db open]
+Strata Assistant: [executes db open]
   Panel: Database Info — my-agent, 3 branches, 847 keys, default branch active
 
 User: "What's in the KV store?"
 
-Claude Data: [executes kv_list + kv_get for each key]
+Strata Assistant: [executes kv_list + kv_get for each key]
   Panel: KV Table — 42 keys, showing key/value/version/timestamp
   "You have 42 keys in the default space. The most recently
    updated keys are agent:state (2 min ago) and cache:results
@@ -122,7 +122,7 @@ Claude Data: [executes kv_list + kv_get for each key]
 
 User: "Show me everything the agent did in the last hour"
 
-Claude Data: [executes event_get_by_type with time filter, kv_list, state_list]
+Strata Assistant: [executes event_get_by_type with time filter, kv_list, state_list]
   Panel: Event Timeline — 34 events, grouped by type
   Panel: State Changes — 3 cells modified
   "In the last hour, the agent made 34 event entries (21 tool_calls,
@@ -131,20 +131,20 @@ Claude Data: [executes event_get_by_type with time filter, kv_list, state_list]
 
 User: "Fork this branch as debug-session and switch to it"
 
-Claude Data: [executes branch_fork, branch_switch]
+Strata Assistant: [executes branch_fork, branch_switch]
   Context indicator updates: debug-session/default
   "Forked 'default' as 'debug-session' and switched to it.
    All your changes will be isolated here."
 
 User: [clicks a cell in the KV Table panel, edits the value directly]
 
-  Panel updates, Claude Data sees the change in context:
+  Panel updates, Strata Assistant sees the change in context:
   "I see you updated agent:config.max_retries from 3 to 5."
 ```
 
 ### 4.5 Conversation Context
 
-Claude Data maintains context about:
+Strata Assistant maintains context about:
 - Which database is open (path, config)
 - Current branch and space
 - Active transaction (if any)
@@ -158,14 +158,14 @@ This means follow-up questions work naturally: "Now show me just the tool_call e
 - User provides their Anthropic API key in app settings
 - Key stored securely in macOS Keychain
 - API calls go directly to Anthropic's API (no intermediate server)
-- The app works without an API key for direct manipulation (panels, command bar) — Claude Data is an enhancement, not a requirement
+- The app works without an API key for direct manipulation (panels, command bar) — Strata Assistant is an enhancement, not a requirement
 
 ### 4.7 Relationship to Strata MCP
 
 Strata Foundry and `strata-mcp` are complementary:
 - **strata-mcp** lets external AI assistants (Claude Code, Claude Desktop) interact with Strata databases via MCP protocol
-- **Claude Data** is an embedded AI assistant inside the Foundry app itself
-- Same tool semantics, different transport: MCP uses the MCP protocol over stdio/SSE; Claude Data calls the Anthropic API directly with tools
+- **Strata Assistant** is an embedded AI assistant inside the Foundry app itself
+- Same tool semantics, different transport: MCP uses the MCP protocol over stdio/SSE; Strata Assistant calls the Anthropic API directly with tools
 - A developer might use strata-mcp in their agent's runtime AND use Foundry to inspect/debug what the agent did
 
 ## 5. Workspace Mode
@@ -195,7 +195,7 @@ The workspace is a **canvas with a conversation bar**.
 |   +--------------------------------------+                        |
 |                                                                    |
 +------------------------------------------------------------------+
-|  > Ask Claude Data or type a command...              [Focus ↗]   |
+|  > Ask Strata Assistant or type a command...              [Focus ↗]   |
 +------------------------------------------------------------------+
 ```
 
@@ -228,7 +228,7 @@ Panels are the building blocks of the workspace. Each panel is an interactive vi
 - **Resize / Rearrange** — drag panel edges to resize, drag title bar to rearrange
 
 **Panel creation:**
-- Panels are created by Claude Data in response to queries
+- Panels are created by Strata Assistant in response to queries
 - Panels are also created by direct actions (open database → Database Info panel, command bar commands)
 - User can explicitly request panels: "show me the KV store" or via a command palette
 
@@ -236,7 +236,7 @@ Panels are the building blocks of the workspace. Each panel is an interactive vi
 
 The conversation bar sits at the bottom of the workspace. It serves dual purpose:
 
-1. **Natural language input** — questions and instructions for Claude Data
+1. **Natural language input** — questions and instructions for Strata Assistant
 2. **Raw command input** — prefix with `/` to run a raw Strata command (e.g., `/kv list`)
 
 The bar shows a single input line. Below it, a collapsible response area shows Claude's latest text response and a scrollable history of the conversation.
@@ -254,7 +254,7 @@ Compact toolbar above the canvas:
 
 ### 5.5 Direct Manipulation
 
-Users can interact with panels without going through Claude Data:
+Users can interact with panels without going through Strata Assistant:
 - Edit a value by clicking it in a panel
 - Add a key-value pair via the panel's + button
 - Delete items via selection + backspace
@@ -274,7 +274,7 @@ Focus mode expands the conversation bar into a full-screen conversational interf
 |  [Toolbar: same as workspace]                    [Workspace ↙]   |
 +------------------------------------------------------------------+
 |                                                                    |
-|  Claude Data                                                       |
+|  Strata Assistant                                                       |
 |  ─────────────                                                     |
 |  You have 42 keys in the KV store. Here are the most recently     |
 |  updated:                                                          |
@@ -328,7 +328,7 @@ Each artifact has:
 - Shows a file picker filtered to directories
 - Validates that the directory contains a valid Strata database
 - Recent databases remembered and shown in Welcome screen / File > Open Recent
-- Or just tell Claude Data: "open ~/projects/my-agent/.strata"
+- Or just tell Strata Assistant: "open ~/projects/my-agent/.strata"
 
 #### Create Database
 - **File > New Database** opens a save dialog
@@ -529,9 +529,9 @@ A new Rust crate (`strata-foundry-bridge`) that:
 
 Why JSON for complex types: Strata's `Value` is a recursive enum (arrays of objects of arrays...). Mapping this to C structs is painful. JSON is the natural serialization and Swift's `Codable` handles it trivially.
 
-### 8.3 Claude Data Architecture
+### 8.3 Strata Assistant Architecture
 
-The Claude Data pipeline in Swift:
+The Strata Assistant pipeline in Swift:
 
 ```
 User message
@@ -660,7 +660,7 @@ For development: a combined `make run` that builds Rust + launches Xcode build.
 |---------|-------|
 | **Workspace mode** | Canvas with panels + conversation bar |
 | **Focus mode** | Full conversation thread with inline artifacts |
-| **Claude Data** | Anthropic API integration, tool execution, panel generation |
+| **Strata Assistant** | Anthropic API integration, tool execution, panel generation |
 | **Open / Create database** | File picker, recent databases, create new |
 | **KV Table panel** | Table view, add/edit/delete, prefix filter, history |
 | **Event List panel** | List view, append, filter by type |
@@ -698,7 +698,7 @@ For development: a combined `make run` that builds Rust + launches Xcode build.
 ### MVP Acceptance Criteria
 
 1. User can open a `.strata` database and see a Database Info panel on the workspace
-2. User can ask Claude Data questions ("show me the KV store", "what events happened?") and see interactive panels appear
+2. User can ask Strata Assistant questions ("show me the KV store", "what events happened?") and see interactive panels appear
 3. Each primitive has a functional panel with current data
 4. User can add, edit, and delete data directly in panels (KV, State, JSON) and see changes reflected
 5. User can append events via the Event List panel
@@ -709,14 +709,14 @@ For development: a combined `make run` that builds Rust + launches Xcode build.
 10. Artifacts can be pinned from Focus to Workspace as persistent panels
 11. Panels auto-refresh when the database is modified externally
 12. Cmd+Z undoes the last data write operation
-13. The app works for direct manipulation without an API key (Claude Data requires a key, but panels and command bar work without one)
+13. The app works for direct manipulation without an API key (Strata Assistant requires a key, but panels and command bar work without one)
 14. Errors are shown gracefully — never silent data corruption
 
 ## 10. Phased Roadmap
 
 ### Phase 1: AI-Native Database Browser
 - Workspace and Focus modes
-- Claude Data with Anthropic API integration
+- Strata Assistant with Anthropic API integration
 - All primitive panels with CRUD
 - Branch switch/fork
 - Conversation bar + raw command support
@@ -741,15 +741,15 @@ For development: a combined `make run` that builds Rust + launches Xcode build.
 - Auto-embed status dashboard and controls
 - Model configuration (endpoint, model, API key)
 - strata-inference integration for local embedding/generation
-- Local model as Claude Data fallback (no API key needed for basic operations)
+- Local model as Strata Assistant fallback (no API key needed for basic operations)
 - Query expansion and re-ranking via configured model
 - Model registry browser
 
 ## 11. Design Principles
 
-1. **Conversation-first:** The primary interaction is talking to Claude Data. Visual panels are the output, not the navigation. You don't browse a tree to find data — you ask for it.
+1. **Conversation-first:** The primary interaction is talking to Strata Assistant. Visual panels are the output, not the navigation. You don't browse a tree to find data — you ask for it.
 
-2. **Direct manipulation as complement:** Panels are fully interactive. When you see data, you can touch it. Clicking, editing, and deleting in panels is always available, with or without Claude Data.
+2. **Direct manipulation as complement:** Panels are fully interactive. When you see data, you can touch it. Clicking, editing, and deleting in panels is always available, with or without Strata Assistant.
 
 3. **Progressive complexity:** Opening a database shows a simple info panel. Asking questions builds up the workspace. Power features (time-travel, transactions, raw commands) are accessible but never in the way.
 
@@ -757,9 +757,9 @@ For development: a combined `make run` that builds Rust + launches Xcode build.
 
 5. **Non-destructive:** Destructive operations require confirmation. Undo is always available. Strata's versioning means data is never truly lost.
 
-6. **Offline-capable:** The app works fully offline for direct manipulation and command bar. Claude Data requires internet (Anthropic API), but the app is useful without it.
+6. **Offline-capable:** The app works fully offline for direct manipulation and command bar. Strata Assistant requires internet (Anthropic API), but the app is useful without it.
 
-7. **Context-aware:** Claude Data knows what's on the workspace, what branch you're on, what you just edited. The conversation is always contextual.
+7. **Context-aware:** Strata Assistant knows what's on the workspace, what branch you're on, what you just edited. The conversation is always contextual.
 
 ## 12. Design Decisions
 
@@ -768,11 +768,11 @@ Resolved decisions from product review:
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | **Interface model** | Unified workspace + Focus conversation | Not a traditional database browser. Workspace is a canvas of interactive panels driven by conversation. Focus is deep conversational mode. |
-| **AI integration** | Anthropic API (Claude Data) | Claude Code proved the conversational tool-use model. Strata's 60 commands map perfectly to tool definitions. |
+| **AI integration** | Anthropic API (Strata Assistant) | Claude Code proved the conversational tool-use model. Strata's 60 commands map perfectly to tool definitions. |
 | **Multi-window vs tabs** | Separate windows (NSDocument) | Standard macOS behavior. Users can merge into tabs natively. |
 | **Value editor** | Tree editor in MVP | Type-aware tree with inline editing per node. Raw JSON toggle deferred to backlog. |
 | **Command bar output** | Persistent scrollable log (in conversation) | Conversation history serves as persistent command log. |
 | **Undo support** | Cmd+Z in MVP | Strata's versioning makes this feasible. Critical for a database tool. |
 | **External changes** | Auto-detect and refresh | Poll WAL changes ~1-2s. Essential for CLI + Foundry side-by-side workflows. |
 | **Distribution** | DMG only | No App Store sandbox restrictions. Standard for developer tools. |
-| **Without API key** | Fully functional for direct manipulation | Claude Data is an enhancement. Panels, command bar, and all CRUD work without a key. |
+| **Without API key** | Fully functional for direct manipulation | Strata Assistant is an enhancement. Panels, command bar, and all CRUD work without a key. |
