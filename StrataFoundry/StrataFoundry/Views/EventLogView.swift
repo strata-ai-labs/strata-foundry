@@ -93,7 +93,7 @@ struct EventLogView: View {
 
         do {
             // Get event count
-            let countJSON = try await client.executeRaw("{\"EventLen\": {\"branch\": \"\(appState.selectedBranch)\"\(appState.asOfFragment())}}")
+            let countJSON = try await client.executeRaw("{\"EventLen\": {\"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())\(appState.asOfFragment())}}")
             if let data = countJSON.data(using: .utf8),
                let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let count = root["Uint"] as? Int {
@@ -104,7 +104,7 @@ struct EventLogView: View {
             var fetched: [EventEntry] = []
             let limit = min(eventCount, 200)
             for seq in 0..<limit {
-                let cmd = "{\"EventGet\": {\"sequence\": \(seq), \"branch\": \"\(appState.selectedBranch)\"\(appState.asOfFragment())}}"
+                let cmd = "{\"EventGet\": {\"sequence\": \(seq), \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())\(appState.asOfFragment())}}"
                 let getJSON = try await client.executeRaw(cmd)
                 if let data = getJSON.data(using: .utf8),
                    let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

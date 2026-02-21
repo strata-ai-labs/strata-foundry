@@ -126,11 +126,11 @@ struct VersionHistoryView: View {
         let cmd: String
         switch primitive {
         case "Kv":
-            cmd = "{\"KvGetv\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"}}"
+            cmd = "{\"KvGetv\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())}}"
         case "State":
-            cmd = "{\"StateGetv\": {\"cell\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"}}"
+            cmd = "{\"StateGetv\": {\"cell\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())}}"
         case "Json":
-            cmd = "{\"JsonGetv\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"}}"
+            cmd = "{\"JsonGetv\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())}}"
         default:
             errorMessage = "Unknown primitive: \(primitive)"
             return

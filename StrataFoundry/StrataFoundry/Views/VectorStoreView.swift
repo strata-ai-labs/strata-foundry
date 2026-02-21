@@ -81,7 +81,7 @@ struct VectorStoreView: View {
         defer { isLoading = false }
 
         do {
-            let json = try await client.executeRaw("{\"VectorListCollections\": {\"branch\": \"\(appState.selectedBranch)\"\(appState.asOfFragment())}}")
+            let json = try await client.executeRaw("{\"VectorListCollections\": {\"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())\(appState.asOfFragment())}}")
             guard let data = json.data(using: .utf8),
                   let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let list = root["VectorCollectionList"] as? [[String: Any]] else {

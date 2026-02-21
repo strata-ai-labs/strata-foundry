@@ -73,6 +73,17 @@ struct DatabaseView: View {
             }
 
             ToolbarItem(placement: .automatic) {
+                if appState.spaces.count > 1 {
+                    Picker("Space", selection: $appState.selectedSpace) {
+                        ForEach(appState.spaces, id: \.self) { space in
+                            Text(space).tag(space)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
+
+            ToolbarItem(placement: .automatic) {
                 if appState.timeTravelDate != nil {
                     HStack(spacing: 6) {
                         DatePicker(
@@ -109,5 +120,9 @@ struct DatabaseView: View {
             }
         }
         .navigationTitle(appState.databaseName)
+        .onChange(of: appState.selectedBranch) {
+            appState.selectedSpace = "default"
+            Task { await appState.loadSpaces() }
+        }
     }
 }

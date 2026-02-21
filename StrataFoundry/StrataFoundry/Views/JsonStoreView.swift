@@ -116,7 +116,7 @@ struct JsonStoreView: View {
         defer { isLoading = false }
 
         do {
-            let json = try await client.executeRaw("{\"JsonList\": {\"limit\": 1000, \"branch\": \"\(appState.selectedBranch)\"\(appState.asOfFragment())}}")
+            let json = try await client.executeRaw("{\"JsonList\": {\"limit\": 1000, \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())\(appState.asOfFragment())}}")
             if let data = json.data(using: .utf8),
                let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let result = root["JsonListResult"] as? [String: Any],
@@ -133,7 +133,7 @@ struct JsonStoreView: View {
     private func loadDocument(key: String) async {
         guard let client = appState.client else { return }
         do {
-            let cmd = "{\"JsonGet\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.asOfFragment())}}"
+            let cmd = "{\"JsonGet\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())\(appState.asOfFragment())}}"
             let json = try await client.executeRaw(cmd)
 
             // Pretty print

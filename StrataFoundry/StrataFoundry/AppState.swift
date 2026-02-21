@@ -33,6 +33,14 @@ final class AppState {
     /// List of branch names in the open database.
     var branches: [String] = []
 
+    // MARK: - Spaces
+
+    /// Currently selected space within the branch.
+    var selectedSpace: String = "default"
+
+    /// List of space names in the current branch.
+    var spaces: [String] = []
+
     // MARK: - Time Travel
 
     /// Date for time-travel queries. nil means "live" (current data).
@@ -48,8 +56,15 @@ final class AppState {
     /// so `.task(id:)` modifiers reload on either change.
     var reloadToken: String {
         let branchPart = selectedBranch
+        let spacePart = selectedSpace
         let timePart = timeTravelDate.map { String(Int64($0.timeIntervalSince1970 * 1_000_000)) } ?? "live"
-        return "\(branchPart)|\(timePart)"
+        return "\(branchPart)|\(spacePart)|\(timePart)"
+    }
+
+    /// Returns a JSON fragment like `, "space": "myspace"` or empty string for "default".
+    func spaceFragment() -> String {
+        guard selectedSpace != "default" else { return "" }
+        return ", \"space\": \"\(selectedSpace)\""
     }
 
     /// Returns a JSON fragment like `, "as_of": 1234567890` or empty string.
@@ -82,6 +97,7 @@ final class AppState {
             databasePath = path
             await refreshInfo()
             await loadBranches()
+            await loadSpaces()
             await loadTimeRange()
         } catch {
             errorMessage = "Failed to open database: \(error.localizedDescription)"
@@ -100,6 +116,7 @@ final class AppState {
             databasePath = path
             await refreshInfo()
             await loadBranches()
+            await loadSpaces()
             await loadTimeRange()
         } catch {
             errorMessage = "Failed to create database: \(error.localizedDescription)"
@@ -114,6 +131,8 @@ final class AppState {
         databaseInfo = nil
         selectedBranch = "default"
         branches = []
+        selectedSpace = "default"
+        spaces = []
         timeTravelDate = nil
         timeRangeOldest = nil
         timeRangeLatest = nil
@@ -168,6 +187,27 @@ final class AppState {
             }
         } catch {
             errorMessage = "Failed to load branches: \(error.localizedDescription)"
+        }
+    }
+
+    /// Load the list of spaces for the current branch.
+    func loadSpaces() async {
+        guard let client else { return }
+        do {
+            let json = try await client.executeRaw("{\"SpaceList\": {\"branch\": \"\(selectedBranch)\"}}")
+            guard let data = json.data(using: .utf8),
+                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let list = root["SpaceList"] as? [String] else {
+                spaces = ["default"]
+                return
+            }
+            spaces = list.isEmpty ? ["default"] : list
+            if !spaces.contains(selectedSpace) {
+                selectedSpace = "default"
+            }
+        } catch {
+            // SpaceList may not be supported — default to single space
+            spaces = ["default"]
         }
     }
 
