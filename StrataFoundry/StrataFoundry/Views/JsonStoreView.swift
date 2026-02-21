@@ -289,7 +289,7 @@ struct JsonStoreView: View {
     private func loadDocument(key: String) async {
         guard let client = appState.client else { return }
         do {
-            let cmd = "{\"JsonGet\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())\(appState.asOfFragment())}}"
+            let cmd = "{\"JsonGet\": {\"key\": \"\(key)\", \"path\": \"$\", \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())\(appState.asOfFragment())}}"
             let json = try await client.executeRaw(cmd)
 
             // Pretty print
