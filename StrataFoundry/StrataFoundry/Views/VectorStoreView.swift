@@ -18,6 +18,16 @@ struct VectorStoreView: View {
     @State private var collections: [CollectionEntry] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var selectedCollection: String?
+
+    // Write-related state
+    @State private var showCreateSheet = false
+    @State private var showDeleteConfirm = false
+    @State private var formName = ""
+    @State private var formDimension = "384"
+    @State private var formMetric = "Cosine"
+
+    private var isTimeTraveling: Bool { appState.timeTravelDate != nil }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,6 +36,25 @@ struct VectorStoreView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
                 Spacer()
+                Text("\(collections.count) collections")
+                    .foregroundStyle(.secondary)
+                Button {
+                    formName = ""
+                    formDimension = "384"
+                    formMetric = "Cosine"
+                    showCreateSheet = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .help("Create Collection")
+                .disabled(isTimeTraveling)
+                Button {
+                    showDeleteConfirm = true
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .help("Drop Collection")
+                .disabled(isTimeTraveling || selectedCollection == nil)
                 Button {
                     Task { await loadCollections() }
                 } label: {
@@ -57,7 +86,7 @@ struct VectorStoreView: View {
                 }
                 Spacer()
             } else {
-                Table(collections) {
+                Table(collections, selection: $selectedCollection) {
                     TableColumn("Collection", value: \.name)
                         .width(min: 150, ideal: 250)
                     TableColumn("Dimension") { c in Text("\(c.dimension)") }
@@ -72,7 +101,104 @@ struct VectorStoreView: View {
         .task(id: appState.reloadToken) {
             await loadCollections()
         }
+        .sheet(isPresented: $showCreateSheet) {
+            VStack(spacing: 16) {
+                Text("Create Collection")
+                    .font(.headline)
+
+                TextField("Collection Name", text: $formName)
+                    .textFieldStyle(.roundedBorder)
+
+                TextField("Dimension", text: $formDimension)
+                    .textFieldStyle(.roundedBorder)
+
+                Picker("Distance Metric", selection: $formMetric) {
+                    Text("Cosine").tag("Cosine")
+                    Text("Euclidean").tag("Euclidean")
+                    Text("DotProduct").tag("DotProduct")
+                }
+                .pickerStyle(.segmented)
+
+                HStack {
+                    Button("Cancel") {
+                        showCreateSheet = false
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Create") {
+                        Task {
+                            await createCollection()
+                            showCreateSheet = false
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(formName.isEmpty || Int(formDimension) == nil)
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 350)
+        }
+        .alert("Drop Collection", isPresented: $showDeleteConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Drop", role: .destructive) {
+                if let name = selectedCollection {
+                    Task { await dropCollection(name) }
+                }
+            }
+        } message: {
+            if let name = selectedCollection {
+                Text("Drop collection \"\(name)\"? All vectors will be deleted.")
+            }
+        }
     }
+
+    // MARK: - Write Operations
+
+    private func createCollection() async {
+        guard let client = appState.client else { return }
+        guard let dim = Int(formDimension) else { return }
+        do {
+            var cmd: [String: Any] = [
+                "collection": formName,
+                "dimension": dim,
+                "metric": formMetric,
+                "branch": appState.selectedBranch
+            ]
+            if appState.selectedSpace != "default" {
+                cmd["space"] = appState.selectedSpace
+            }
+            let wrapper: [String: Any] = ["VectorCreateCollection": cmd]
+            let data = try JSONSerialization.data(withJSONObject: wrapper)
+            let jsonStr = String(data: data, encoding: .utf8)!
+            _ = try await client.executeRaw(jsonStr)
+            await loadCollections()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func dropCollection(_ name: String) async {
+        guard let client = appState.client else { return }
+        do {
+            var cmd: [String: Any] = [
+                "collection": name,
+                "branch": appState.selectedBranch
+            ]
+            if appState.selectedSpace != "default" {
+                cmd["space"] = appState.selectedSpace
+            }
+            let wrapper: [String: Any] = ["VectorDeleteCollection": cmd]
+            let data = try JSONSerialization.data(withJSONObject: wrapper)
+            let jsonStr = String(data: data, encoding: .utf8)!
+            _ = try await client.executeRaw(jsonStr)
+            if selectedCollection == name { selectedCollection = nil }
+            await loadCollections()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Load
 
     private func loadCollections() async {
         guard let client = appState.client else { return }

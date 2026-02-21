@@ -20,6 +20,13 @@ struct EventLogView: View {
     @State private var errorMessage: String?
     @State private var eventCount: Int = 0
 
+    // Write-related state
+    @State private var showAppendSheet = false
+    @State private var formEventType = ""
+    @State private var formPayload = ""
+
+    private var isTimeTraveling: Bool { appState.timeTravelDate != nil }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -29,6 +36,13 @@ struct EventLogView: View {
                 Spacer()
                 Text("\(eventCount) events")
                     .foregroundStyle(.secondary)
+                Button {
+                    showAppendSheet = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .help("Append Event")
+                .disabled(isTimeTraveling)
                 Button {
                     Task { await loadEvents() }
                 } label: {
@@ -83,7 +97,84 @@ struct EventLogView: View {
         .task(id: appState.reloadToken) {
             await loadEvents()
         }
+        .sheet(isPresented: $showAppendSheet, onDismiss: clearForm) {
+            VStack(spacing: 16) {
+                Text("Append Event")
+                    .font(.headline)
+
+                TextField("Event Type", text: $formEventType)
+                    .textFieldStyle(.roundedBorder)
+
+                Text("Payload (Strata Value JSON)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                TextEditor(text: $formPayload)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 100)
+                    .border(Color.secondary.opacity(0.3))
+
+                HStack {
+                    Button("Cancel") {
+                        showAppendSheet = false
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Append") {
+                        Task {
+                            await appendEvent()
+                            showAppendSheet = false
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(formEventType.isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 400)
+        }
     }
+
+    private func clearForm() {
+        formEventType = ""
+        formPayload = ""
+    }
+
+    // MARK: - Write Operations
+
+    private func appendEvent() async {
+        guard let client = appState.client else { return }
+        do {
+            // Parse payload or default to empty string value
+            let payload: Any
+            if formPayload.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                payload = ["String": ""]
+            } else if let data = formPayload.data(using: .utf8),
+                      let obj = try? JSONSerialization.jsonObject(with: data) {
+                payload = obj
+            } else {
+                payload = ["String": formPayload]
+            }
+
+            var cmd: [String: Any] = [
+                "event_type": formEventType,
+                "payload": payload,
+                "branch": appState.selectedBranch
+            ]
+            if appState.selectedSpace != "default" {
+                cmd["space"] = appState.selectedSpace
+            }
+            let wrapper: [String: Any] = ["EventAppend": cmd]
+            let data = try JSONSerialization.data(withJSONObject: wrapper)
+            let jsonStr = String(data: data, encoding: .utf8)!
+            _ = try await client.executeRaw(jsonStr)
+            await loadEvents()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Load
 
     private func loadEvents() async {
         guard let client = appState.client else { return }

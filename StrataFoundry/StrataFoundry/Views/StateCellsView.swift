@@ -20,6 +20,20 @@ struct StateCellsView: View {
     @State private var errorMessage: String?
     @State private var selectedCell: StateCellEntry?
 
+    // Write-related state
+    @State private var showAddSheet = false
+    @State private var editingCell: StateCellEntry?
+    @State private var showDeleteConfirm = false
+    @State private var cellToDelete: StateCellEntry?
+    @State private var historyCell: StateCellEntry?
+
+    // Form fields
+    @State private var formCell = ""
+    @State private var formValue = ""
+    @State private var formValueType = "String"
+
+    private var isTimeTraveling: Bool { appState.timeTravelDate != nil }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -29,6 +43,23 @@ struct StateCellsView: View {
                 Spacer()
                 Text("\(cells.count) cells")
                     .foregroundStyle(.secondary)
+                Button {
+                    showAddSheet = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .help("Add Cell")
+                .disabled(isTimeTraveling)
+                Button {
+                    if let cell = selectedCell {
+                        cellToDelete = cell
+                        showDeleteConfirm = true
+                    }
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .help("Delete Cell")
+                .disabled(isTimeTraveling || selectedCell == nil)
                 Button {
                     Task { await loadCells() }
                 } label: {
@@ -85,18 +116,175 @@ struct StateCellsView: View {
                     .onTapGesture {
                         selectedCell = cell
                     }
+                    .contextMenu {
+                        Button("Edit") {
+                            editingCell = cell
+                        }
+                        .disabled(isTimeTraveling)
+                        Button("Version History") {
+                            historyCell = cell
+                        }
+                        Divider()
+                        Button("Delete", role: .destructive) {
+                            cellToDelete = cell
+                            showDeleteConfirm = true
+                        }
+                        .disabled(isTimeTraveling)
+                    }
                 }
             }
         }
         .task(id: appState.reloadToken) {
             await loadCells()
         }
-        .sheet(item: $selectedCell) { cell in
+        .sheet(item: $historyCell) { cell in
             VersionHistoryView(primitive: "State", key: cell.name)
                 .environment(appState)
                 .frame(minWidth: 400, minHeight: 300)
         }
+        .sheet(isPresented: $showAddSheet, onDismiss: clearForm) {
+            cellFormSheet(isEditing: false)
+        }
+        .sheet(item: $editingCell, onDismiss: clearForm) { cell in
+            cellFormSheet(isEditing: true)
+                .onAppear {
+                    formCell = cell.name
+                    formValue = cell.value
+                    formValueType = cell.valueType == "?" ? "String" : cell.valueType
+                    if cell.valueType == "String" && formValue.hasPrefix("\"") && formValue.hasSuffix("\"") {
+                        formValue = String(formValue.dropFirst().dropLast())
+                    }
+                }
+        }
+        .alert("Delete Cell", isPresented: $showDeleteConfirm) {
+            Button("Cancel", role: .cancel) { cellToDelete = nil }
+            Button("Delete", role: .destructive) {
+                if let cell = cellToDelete {
+                    Task { await deleteCell(cell.name) }
+                    cellToDelete = nil
+                }
+            }
+        } message: {
+            if let cell = cellToDelete {
+                Text("Delete cell \"\(cell.name)\"? This cannot be undone.")
+            }
+        }
     }
+
+    @ViewBuilder
+    private func cellFormSheet(isEditing: Bool) -> some View {
+        VStack(spacing: 16) {
+            Text(isEditing ? "Edit Cell" : "Add Cell")
+                .font(.headline)
+
+            TextField("Cell Name", text: $formCell)
+                .textFieldStyle(.roundedBorder)
+                .disabled(isEditing)
+
+            Picker("Value Type", selection: $formValueType) {
+                Text("String").tag("String")
+                Text("Int").tag("Int")
+                Text("Float").tag("Float")
+                Text("Bool").tag("Bool")
+                Text("JSON").tag("JSON")
+            }
+            .pickerStyle(.segmented)
+
+            if formValueType == "JSON" {
+                TextEditor(text: $formValue)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 100)
+                    .border(Color.secondary.opacity(0.3))
+            } else if formValueType == "Bool" {
+                Picker("Value", selection: $formValue) {
+                    Text("true").tag("true")
+                    Text("false").tag("false")
+                }
+                .pickerStyle(.segmented)
+                .onAppear {
+                    if formValue != "true" && formValue != "false" {
+                        formValue = "true"
+                    }
+                }
+            } else {
+                TextField("Value", text: $formValue)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            HStack {
+                Button("Cancel") {
+                    showAddSheet = false
+                    editingCell = nil
+                }
+                .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(isEditing ? "Save" : "Add") {
+                    Task {
+                        let valueJSON = buildStrataValue(formValue, type: formValueType)
+                        await setCell(name: formCell, valueJSON: valueJSON)
+                        showAddSheet = false
+                        editingCell = nil
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(formCell.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 350)
+    }
+
+    private func clearForm() {
+        formCell = ""
+        formValue = ""
+        formValueType = "String"
+    }
+
+    // MARK: - Write Operations
+
+    private func setCell(name: String, valueJSON: Any) async {
+        guard let client = appState.client else { return }
+        do {
+            var cmd: [String: Any] = [
+                "cell": name,
+                "value": valueJSON,
+                "branch": appState.selectedBranch
+            ]
+            if appState.selectedSpace != "default" {
+                cmd["space"] = appState.selectedSpace
+            }
+            let wrapper: [String: Any] = ["StateSet": cmd]
+            let data = try JSONSerialization.data(withJSONObject: wrapper)
+            let jsonStr = String(data: data, encoding: .utf8)!
+            _ = try await client.executeRaw(jsonStr)
+            await loadCells()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteCell(_ name: String) async {
+        guard let client = appState.client else { return }
+        do {
+            var cmd: [String: Any] = [
+                "cell": name,
+                "branch": appState.selectedBranch
+            ]
+            if appState.selectedSpace != "default" {
+                cmd["space"] = appState.selectedSpace
+            }
+            let wrapper: [String: Any] = ["StateDelete": cmd]
+            let data = try JSONSerialization.data(withJSONObject: wrapper)
+            let jsonStr = String(data: data, encoding: .utf8)!
+            _ = try await client.executeRaw(jsonStr)
+            if selectedCell?.name == name { selectedCell = nil }
+            await loadCells()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Load
 
     private func loadCells() async {
         guard let client = appState.client else { return }
