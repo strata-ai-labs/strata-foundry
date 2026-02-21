@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-struct KVEntry: Identifiable {
+struct KVEntry: Identifiable, Hashable {
     let id: String
     let key: String
     let value: String
@@ -19,6 +19,7 @@ struct KVStoreView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var filterText = ""
+    @State private var selectedEntry: KVEntry?
 
     private var filteredEntries: [KVEntry] {
         if filterText.isEmpty { return entries }
@@ -68,7 +69,7 @@ struct KVStoreView: View {
                 }
                 Spacer()
             } else {
-                List(filteredEntries) { entry in
+                List(filteredEntries, selection: $selectedEntry) { entry in
                     HStack(spacing: 12) {
                         Text(entry.key)
                             .font(.system(.body, design: .monospaced))
@@ -88,11 +89,21 @@ struct KVStoreView: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
+                    .tag(entry)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedEntry = entry
+                    }
                 }
             }
         }
-        .task(id: appState.selectedBranch) {
+        .task(id: appState.reloadToken) {
             await loadEntries()
+        }
+        .sheet(item: $selectedEntry) { entry in
+            VersionHistoryView(primitive: "Kv", key: entry.key)
+                .environment(appState)
+                .frame(minWidth: 400, minHeight: 300)
         }
     }
 
@@ -103,7 +114,7 @@ struct KVStoreView: View {
         defer { isLoading = false }
 
         do {
-            let listJSON = try await client.executeRaw(#"{"KvList": {"branch": "\#(appState.selectedBranch)"}}"#)
+            let listJSON = try await client.executeRaw("{\"KvList\": {\"branch\": \"\(appState.selectedBranch)\"\(appState.asOfFragment())}}")
             guard let data = listJSON.data(using: .utf8),
                   let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let keys = root["Keys"] as? [String] else {
@@ -113,7 +124,7 @@ struct KVStoreView: View {
 
             var newEntries: [KVEntry] = []
             for key in keys {
-                let cmd = "{\"KvGet\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"}}"
+                let cmd = "{\"KvGet\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.asOfFragment())}}"
                 let getJSON = try await client.executeRaw(cmd)
                 if let d = getJSON.data(using: .utf8),
                    let r = try? JSONSerialization.jsonObject(with: d) as? [String: Any],

@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-struct StateCellEntry: Identifiable {
+struct StateCellEntry: Identifiable, Hashable {
     let id: String
     let name: String
     let value: String
@@ -18,6 +18,7 @@ struct StateCellsView: View {
     @State private var cells: [StateCellEntry] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var selectedCell: StateCellEntry?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -59,7 +60,7 @@ struct StateCellsView: View {
                 }
                 Spacer()
             } else {
-                List(cells) { cell in
+                List(cells, selection: $selectedCell) { cell in
                     HStack(spacing: 12) {
                         Text(cell.name)
                             .font(.system(.body, design: .monospaced))
@@ -79,11 +80,21 @@ struct StateCellsView: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
+                    .tag(cell)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedCell = cell
+                    }
                 }
             }
         }
-        .task(id: appState.selectedBranch) {
+        .task(id: appState.reloadToken) {
             await loadCells()
+        }
+        .sheet(item: $selectedCell) { cell in
+            VersionHistoryView(primitive: "State", key: cell.name)
+                .environment(appState)
+                .frame(minWidth: 400, minHeight: 300)
         }
     }
 
@@ -94,7 +105,7 @@ struct StateCellsView: View {
         defer { isLoading = false }
 
         do {
-            let listJSON = try await client.executeRaw(#"{"StateList": {"branch": "\#(appState.selectedBranch)"}}"#)
+            let listJSON = try await client.executeRaw("{\"StateList\": {\"branch\": \"\(appState.selectedBranch)\"\(appState.asOfFragment())}}")
             guard let data = listJSON.data(using: .utf8),
                   let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let keys = root["Keys"] as? [String] else {
@@ -104,7 +115,7 @@ struct StateCellsView: View {
 
             var newCells: [StateCellEntry] = []
             for name in keys {
-                let cmd = "{\"StateGet\": {\"cell\": \"\(name)\", \"branch\": \"\(appState.selectedBranch)\"}}"
+                let cmd = "{\"StateGet\": {\"cell\": \"\(name)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.asOfFragment())}}"
                 let getJSON = try await client.executeRaw(cmd)
                 if let d = getJSON.data(using: .utf8),
                    let r = try? JSONSerialization.jsonObject(with: d) as? [String: Any],

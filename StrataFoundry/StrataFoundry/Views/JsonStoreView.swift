@@ -12,6 +12,7 @@ struct JsonStoreView: View {
     @State private var documentJSON: String = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showHistory = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -60,26 +61,48 @@ struct JsonStoreView: View {
                     }
                     .frame(minWidth: 150, idealWidth: 200)
 
-                    ScrollView {
-                        if documentJSON.isEmpty {
-                            Text("Select a document")
-                                .foregroundStyle(.secondary)
-                                .padding()
+                    VStack(spacing: 0) {
+                        if selectedKey != nil {
+                            HStack {
+                                Spacer()
+                                Button {
+                                    showHistory.toggle()
+                                } label: {
+                                    Label(showHistory ? "Document" : "History",
+                                          systemImage: showHistory ? "doc.text" : "clock.arrow.circlepath")
+                                }
+                                .buttonStyle(.borderless)
+                                .padding(8)
+                            }
+                            Divider()
+                        }
+
+                        if showHistory, let key = selectedKey {
+                            VersionHistoryView(primitive: "Json", key: key)
                         } else {
-                            Text(documentJSON)
-                                .font(.system(.body, design: .monospaced))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding()
-                                .textSelection(.enabled)
+                            ScrollView {
+                                if documentJSON.isEmpty {
+                                    Text("Select a document")
+                                        .foregroundStyle(.secondary)
+                                        .padding()
+                                } else {
+                                    Text(documentJSON)
+                                        .font(.system(.body, design: .monospaced))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding()
+                                        .textSelection(.enabled)
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-        .task(id: appState.selectedBranch) {
+        .task(id: appState.reloadToken) {
             await loadKeys()
         }
         .onChange(of: selectedKey) { _, newKey in
+            showHistory = false
             if let key = newKey {
                 Task { await loadDocument(key: key) }
             }
@@ -93,7 +116,7 @@ struct JsonStoreView: View {
         defer { isLoading = false }
 
         do {
-            let json = try await client.executeRaw(#"{"JsonList": {"limit": 1000, "branch": "\#(appState.selectedBranch)"}}"#)
+            let json = try await client.executeRaw("{\"JsonList\": {\"limit\": 1000, \"branch\": \"\(appState.selectedBranch)\"\(appState.asOfFragment())}}")
             if let data = json.data(using: .utf8),
                let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let result = root["JsonListResult"] as? [String: Any],
@@ -110,7 +133,7 @@ struct JsonStoreView: View {
     private func loadDocument(key: String) async {
         guard let client = appState.client else { return }
         do {
-            let cmd = "{\"JsonGet\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"}}"
+            let cmd = "{\"JsonGet\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.asOfFragment())}}"
             let json = try await client.executeRaw(cmd)
 
             // Pretty print

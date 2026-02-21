@@ -33,6 +33,32 @@ final class AppState {
     /// List of branch names in the open database.
     var branches: [String] = []
 
+    // MARK: - Time Travel
+
+    /// Date for time-travel queries. nil means "live" (current data).
+    var timeTravelDate: Date? = nil
+
+    /// Oldest timestamp available on the current branch.
+    var timeRangeOldest: Date? = nil
+
+    /// Latest timestamp available on the current branch.
+    var timeRangeLatest: Date? = nil
+
+    /// Combined token that changes when branch or time-travel date changes,
+    /// so `.task(id:)` modifiers reload on either change.
+    var reloadToken: String {
+        let branchPart = selectedBranch
+        let timePart = timeTravelDate.map { String(Int64($0.timeIntervalSince1970 * 1_000_000)) } ?? "live"
+        return "\(branchPart)|\(timePart)"
+    }
+
+    /// Returns a JSON fragment like `, "as_of": 1234567890` or empty string.
+    func asOfFragment() -> String {
+        guard let date = timeTravelDate else { return "" }
+        let micros = Int64(date.timeIntervalSince1970 * 1_000_000)
+        return ", \"as_of\": \(micros)"
+    }
+
     /// Whether a database is currently open.
     var isOpen: Bool { client?.isOpen ?? false }
 
@@ -56,6 +82,7 @@ final class AppState {
             databasePath = path
             await refreshInfo()
             await loadBranches()
+            await loadTimeRange()
         } catch {
             errorMessage = "Failed to open database: \(error.localizedDescription)"
         }
@@ -73,6 +100,7 @@ final class AppState {
             databasePath = path
             await refreshInfo()
             await loadBranches()
+            await loadTimeRange()
         } catch {
             errorMessage = "Failed to create database: \(error.localizedDescription)"
         }
@@ -86,6 +114,42 @@ final class AppState {
         databaseInfo = nil
         selectedBranch = "default"
         branches = []
+        timeTravelDate = nil
+        timeRangeOldest = nil
+        timeRangeLatest = nil
+    }
+
+    /// Load the oldest/latest timestamps for the current branch via TimeRange.
+    func loadTimeRange() async {
+        guard let client else { return }
+        do {
+            let json = try await client.executeRaw("{\"TimeRange\": {\"branch\": \"\(selectedBranch)\"}}")
+            guard let data = json.data(using: .utf8),
+                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let range = root["TimeRange"] as? [String: Any] else {
+                timeRangeOldest = nil
+                timeRangeLatest = nil
+                return
+            }
+            if let oldest = range["oldest_ts"] as? Int64, oldest > 0 {
+                timeRangeOldest = Date(timeIntervalSince1970: Double(oldest) / 1_000_000.0)
+            } else if let oldest = range["oldest_ts"] as? Double, oldest > 0 {
+                timeRangeOldest = Date(timeIntervalSince1970: oldest / 1_000_000.0)
+            } else {
+                timeRangeOldest = nil
+            }
+            if let latest = range["latest_ts"] as? Int64, latest > 0 {
+                timeRangeLatest = Date(timeIntervalSince1970: Double(latest) / 1_000_000.0)
+            } else if let latest = range["latest_ts"] as? Double, latest > 0 {
+                timeRangeLatest = Date(timeIntervalSince1970: latest / 1_000_000.0)
+            } else {
+                timeRangeLatest = nil
+            }
+        } catch {
+            // TimeRange may not be supported — silently ignore
+            timeRangeOldest = nil
+            timeRangeLatest = nil
+        }
     }
 
     /// Load the list of branch names from the database.

@@ -71,6 +71,42 @@ struct DatabaseView: View {
                 }
                 .pickerStyle(.menu)
             }
+
+            ToolbarItem(placement: .automatic) {
+                if appState.timeTravelDate != nil {
+                    HStack(spacing: 6) {
+                        DatePicker(
+                            "As of",
+                            selection: Binding(
+                                get: { appState.timeTravelDate ?? Date() },
+                                set: { appState.timeTravelDate = $0 }
+                            ),
+                            in: (appState.timeRangeOldest ?? .distantPast)...(appState.timeRangeLatest ?? Date()),
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                        .labelsHidden()
+
+                        Button {
+                            appState.timeTravelDate = nil
+                        } label: {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(.green)
+                                    .frame(width: 8, height: 8)
+                                Text("Live")
+                            }
+                        }
+                        .help("Return to live data")
+                    }
+                } else {
+                    Button {
+                        appState.timeTravelDate = appState.timeRangeLatest ?? Date()
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+                    .help("Enable time travel")
+                }
+            }
         }
         .navigationTitle(appState.databaseName)
     }
