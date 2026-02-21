@@ -211,6 +211,23 @@ final class AppState {
         }
     }
 
+    /// Create a new space on the current branch.
+    func createSpace(_ name: String) async throws {
+        guard let client else { return }
+        _ = try await client.executeRaw(
+            "{\"SpaceCreate\": {\"branch\": \"\(selectedBranch)\", \"space\": \"\(name)\"}}")
+        await loadSpaces()
+    }
+
+    /// Delete a space on the current branch.
+    func deleteSpace(_ name: String, force: Bool) async throws {
+        guard let client else { return }
+        _ = try await client.executeRaw(
+            "{\"SpaceDelete\": {\"branch\": \"\(selectedBranch)\", \"space\": \"\(name)\", \"force\": \(force)}}")
+        if selectedSpace == name { selectedSpace = "default" }
+        await loadSpaces()
+    }
+
     /// Refresh database info.
     func refreshInfo() async {
         guard let client else { return }
