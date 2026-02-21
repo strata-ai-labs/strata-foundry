@@ -228,6 +228,86 @@ final class AppState {
         await loadSpaces()
     }
 
+    // MARK: - Branch Management
+
+    /// Create a new branch.
+    func createBranch(_ name: String) async throws {
+        guard let client else { return }
+        _ = try await client.executeRaw(
+            "{\"BranchCreate\": {\"branch_id\": \"\(name)\"}}")
+        await loadBranches()
+    }
+
+    /// Delete a branch.
+    func deleteBranch(_ name: String) async throws {
+        guard let client else { return }
+        _ = try await client.executeRaw(
+            "{\"BranchDelete\": {\"branch\": \"\(name)\"}}")
+        if selectedBranch == name { selectedBranch = "default" }
+        await loadBranches()
+        await loadSpaces()
+    }
+
+    /// Export a branch to a bundle file.
+    func exportBranch(_ name: String, to path: String) async throws -> BranchExportResult {
+        guard let client else {
+            throw NSError(domain: "AppState", code: 1, userInfo: [NSLocalizedDescriptionKey: "No database open"])
+        }
+        let json = try await client.executeRaw(
+            "{\"BranchExport\": {\"branch_id\": \"\(name)\", \"path\": \"\(path)\"}}")
+        guard let data = json.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let exported = root["BranchExported"] as? [String: Any] else {
+            throw NSError(domain: "AppState", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unexpected response: \(json)"])
+        }
+        return BranchExportResult(
+            branchId: exported["branch_id"] as? String ?? name,
+            path: exported["path"] as? String ?? path,
+            entryCount: exported["entry_count"] as? Int ?? 0,
+            bundleSize: exported["bundle_size"] as? Int ?? 0
+        )
+    }
+
+    /// Import a branch from a bundle file.
+    func importBranch(from path: String) async throws -> BranchImportResult {
+        guard let client else {
+            throw NSError(domain: "AppState", code: 1, userInfo: [NSLocalizedDescriptionKey: "No database open"])
+        }
+        let json = try await client.executeRaw(
+            "{\"BranchImport\": {\"path\": \"\(path)\"}}")
+        guard let data = json.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let imported = root["BranchImported"] as? [String: Any] else {
+            throw NSError(domain: "AppState", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unexpected response: \(json)"])
+        }
+        await loadBranches()
+        return BranchImportResult(
+            branchId: imported["branch_id"] as? String ?? "",
+            transactionsApplied: imported["transactions_applied"] as? Int ?? 0,
+            keysWritten: imported["keys_written"] as? Int ?? 0
+        )
+    }
+
+    /// Validate a branch bundle file.
+    func validateBundle(at path: String) async throws -> BundleValidateResult {
+        guard let client else {
+            throw NSError(domain: "AppState", code: 1, userInfo: [NSLocalizedDescriptionKey: "No database open"])
+        }
+        let json = try await client.executeRaw(
+            "{\"BranchBundleValidate\": {\"path\": \"\(path)\"}}")
+        guard let data = json.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let validated = root["BundleValidated"] as? [String: Any] else {
+            throw NSError(domain: "AppState", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unexpected response: \(json)"])
+        }
+        return BundleValidateResult(
+            branchId: validated["branch_id"] as? String ?? "",
+            formatVersion: validated["format_version"] as? Int ?? 0,
+            entryCount: validated["entry_count"] as? Int ?? 0,
+            checksumsValid: validated["checksums_valid"] as? Bool ?? false
+        )
+    }
+
     /// Refresh database info.
     func refreshInfo() async {
         guard let client else { return }
@@ -238,6 +318,26 @@ final class AppState {
             errorMessage = "Failed to get database info: \(error.localizedDescription)"
         }
     }
+}
+
+struct BranchExportResult {
+    let branchId: String
+    let path: String
+    let entryCount: Int
+    let bundleSize: Int
+}
+
+struct BranchImportResult {
+    let branchId: String
+    let transactionsApplied: Int
+    let keysWritten: Int
+}
+
+struct BundleValidateResult {
+    let branchId: String
+    let formatVersion: Int
+    let entryCount: Int
+    let checksumsValid: Bool
 }
 
 /// Parsed database info from the Info command.
