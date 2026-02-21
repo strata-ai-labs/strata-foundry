@@ -1,0 +1,25 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Xcode
+build/
+DerivedData/
+*.xcuserdata/
+*.xcworkspace/xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Frameworks (built artifacts, not checked in)
+StrataFoundry/Frameworks/*.dylib
+
+# Secrets
+.env

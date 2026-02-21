@@ -1,0 +1,13 @@
+[package]
+name = "strata-foundry-bridge"
+version = "0.1.0"
+edition = "2021"
+description = "C-ABI bridge from Swift to stratadb"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+stratadb = { path = "../../strata-core" }
+serde_json = "1"
+dashmap = "6"
