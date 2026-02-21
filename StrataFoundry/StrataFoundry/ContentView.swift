@@ -42,34 +42,40 @@ struct ContentView: View {
     }
 
     private func openDatabasePanel() {
-        let panel = NSOpenPanel()
-        panel.title = "Open Strata Database"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.message = "Select a .strata database directory"
+        // Dispatch outside SwiftUI's layout transaction to avoid
+        // "cannot run inside a transaction begin/commit pair" error.
+        DispatchQueue.main.async {
+            let panel = NSOpenPanel()
+            panel.title = "Open Strata Database"
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.message = "Select a .strata database directory"
 
-        if panel.runModal() == .OK, let url = panel.url {
-            Task {
-                await appState.openDatabase(at: url.path)
+            if panel.runModal() == .OK, let url = panel.url {
+                Task {
+                    await appState.openDatabase(at: url.path)
+                }
             }
         }
     }
 
     private func createDatabasePanel() {
-        let panel = NSOpenPanel()
-        panel.title = "Create Strata Database"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.canCreateDirectories = true
-        panel.message = "Choose a directory for the new database"
-        panel.prompt = "Create"
+        DispatchQueue.main.async {
+            let panel = NSOpenPanel()
+            panel.title = "Create Strata Database"
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.canCreateDirectories = true
+            panel.message = "Choose a directory for the new database"
+            panel.prompt = "Create"
 
-        if panel.runModal() == .OK, let url = panel.url {
-            let dbPath = url.appendingPathComponent(".strata").path
-            Task {
-                await appState.createDatabase(at: dbPath)
+            if panel.runModal() == .OK, let url = panel.url {
+                let dbPath = url.appendingPathComponent(".strata").path
+                Task {
+                    await appState.createDatabase(at: dbPath)
+                }
             }
         }
     }
