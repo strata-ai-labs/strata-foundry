@@ -20,6 +20,10 @@ struct JsonStoreView: View {
     @State private var showDeleteConfirm = false
     @State private var formKey = ""
     @State private var formJSON = ""
+    @State private var showBatchSheet = false
+    @State private var batchJSON = ""
+    @State private var batchError: String?
+    @State private var batchSuccess: String?
 
     private var isTimeTraveling: Bool { appState.timeTravelDate != nil }
 
@@ -40,6 +44,16 @@ struct JsonStoreView: View {
                     Image(systemName: "plus")
                 }
                 .help("Add Document")
+                .disabled(isTimeTraveling)
+                Button {
+                    batchJSON = ""
+                    batchError = nil
+                    batchSuccess = nil
+                    showBatchSheet = true
+                } label: {
+                    Image(systemName: "square.and.arrow.down.on.square")
+                }
+                .help("Batch Import")
                 .disabled(isTimeTraveling)
                 Button {
                     showDeleteConfirm = true
@@ -146,6 +160,48 @@ struct JsonStoreView: View {
         }
         .sheet(isPresented: $showEditSheet) {
             jsonFormSheet(isEditing: true)
+        }
+        .sheet(isPresented: $showBatchSheet) {
+            VStack(spacing: 16) {
+                Text("Batch Import (JsonBatchSet)")
+                    .font(.headline)
+
+                Text("JSON array of {\"key\": \"...\", \"path\": \"$\", \"value\": {...}} objects")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                TextEditor(text: $batchJSON)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 200)
+                    .border(Color.secondary.opacity(0.3))
+
+                if let err = batchError {
+                    Text(err)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+                if let success = batchSuccess {
+                    Text(success)
+                        .foregroundStyle(.green)
+                        .font(.caption)
+                }
+
+                HStack {
+                    Button("Cancel") {
+                        showBatchSheet = false
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Import") {
+                        Task { await batchSet() }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(batchJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 500, minHeight: 400)
         }
         .alert("Delete Document", isPresented: $showDeleteConfirm) {
             Button("Cancel", role: .cancel) {}
@@ -263,6 +319,34 @@ struct JsonStoreView: View {
         }
     }
 
+    private func batchSet() async {
+        guard let client = appState.client else { return }
+        batchError = nil
+        batchSuccess = nil
+        do {
+            guard let data = batchJSON.data(using: .utf8),
+                  let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                batchError = "Invalid JSON: expected an array of {\"key\": \"...\", \"path\": \"$\", \"value\": {...}} objects"
+                return
+            }
+            var cmd: [String: Any] = [
+                "items": items,
+                "branch": appState.selectedBranch
+            ]
+            if appState.selectedSpace != "default" {
+                cmd["space"] = appState.selectedSpace
+            }
+            let wrapper: [String: Any] = ["JsonBatchSet": cmd]
+            let wrapperData = try JSONSerialization.data(withJSONObject: wrapper)
+            let jsonStr = String(data: wrapperData, encoding: .utf8)!
+            _ = try await client.executeRaw(jsonStr)
+            batchSuccess = "Imported \(items.count) documents."
+            await loadKeys()
+        } catch {
+            batchError = error.localizedDescription
+        }
+    }
+
     // MARK: - Load
 
     private func loadKeys() async {
@@ -289,7 +373,20 @@ struct JsonStoreView: View {
     private func loadDocument(key: String) async {
         guard let client = appState.client else { return }
         do {
-            let cmd = "{\"JsonGet\": {\"key\": \"\(key)\", \"path\": \"$\", \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())\(appState.asOfFragment())}}"
+            var getCmd: [String: Any] = [
+                "key": key,
+                "path": "$",
+                "branch": appState.selectedBranch
+            ]
+            if appState.selectedSpace != "default" {
+                getCmd["space"] = appState.selectedSpace
+            }
+            if let date = appState.timeTravelDate {
+                getCmd["as_of"] = Int64(date.timeIntervalSince1970 * 1_000_000)
+            }
+            let wrapper = ["JsonGet": getCmd]
+            let cmdData = try JSONSerialization.data(withJSONObject: wrapper)
+            let cmd = String(data: cmdData, encoding: .utf8)!
             let json = try await client.executeRaw(cmd)
 
             // Pretty print

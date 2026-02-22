@@ -43,6 +43,7 @@ enum RightPaneMode: String, CaseIterable {
     case lookup = "Lookup"
     case upsert = "Upsert"
     case search = "Search"
+    case batch = "Batch"
 }
 
 // MARK: - View
@@ -87,6 +88,11 @@ struct VectorStoreView: View {
     @State private var searchError: String?
     @State private var selectedMatch: String?
     @State private var isSearching = false
+
+    // Batch Upsert
+    @State private var batchUpsertJSON = ""
+    @State private var batchUpsertSuccess: String?
+    @State private var batchUpsertError: String?
 
     private var isTimeTraveling: Bool { appState.timeTravelDate != nil }
 
@@ -270,6 +276,8 @@ struct VectorStoreView: View {
                             upsertModeView(collection: collName)
                         case .search:
                             searchModeView(collection: collName)
+                        case .batch:
+                            batchUpsertModeView(collection: collName)
                         }
                     }
                     .padding(16)
@@ -526,6 +534,42 @@ struct VectorStoreView: View {
         }
     }
 
+    // MARK: - Batch Upsert Mode
+
+    @ViewBuilder
+    private func batchUpsertModeView(collection: String) -> some View {
+        if isTimeTraveling {
+            Label("Batch upsert is disabled during time travel", systemImage: "info.circle")
+                .foregroundStyle(.orange)
+                .font(.callout)
+        }
+
+        Text("JSON array of vectors")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        Text("Each item: {\"key\": \"...\", \"vector\": [...], \"metadata\": {...}}")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+
+        TextEditor(text: $batchUpsertJSON)
+            .font(.system(.body, design: .monospaced))
+            .frame(minHeight: 200)
+            .border(Color.secondary.opacity(0.3))
+            .disabled(isTimeTraveling)
+
+        Button("Batch Upsert") {
+            Task { await vectorBatchUpsert(collection: collection) }
+        }
+        .disabled(isTimeTraveling || batchUpsertJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+        if let success = batchUpsertSuccess {
+            Text(success).foregroundStyle(.green).font(.callout)
+        }
+        if let error = batchUpsertError {
+            Text(error).foregroundStyle(.red).font(.callout)
+        }
+    }
+
     // MARK: - State Management
 
     private func resetRightPaneState() {
@@ -545,6 +589,9 @@ struct VectorStoreView: View {
         searchResults = []
         searchError = nil
         selectedMatch = nil
+        batchUpsertJSON = ""
+        batchUpsertSuccess = nil
+        batchUpsertError = nil
     }
 
     // MARK: - Collection Operations
@@ -869,6 +916,45 @@ struct VectorStoreView: View {
             }
         } catch {
             searchError = error.localizedDescription
+        }
+    }
+
+    // MARK: - Vector Batch Upsert
+
+    private func vectorBatchUpsert(collection: String) async {
+        guard let client = appState.client else { return }
+        batchUpsertSuccess = nil
+        batchUpsertError = nil
+        do {
+            guard let data = batchUpsertJSON.data(using: .utf8),
+                  let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                batchUpsertError = "Invalid JSON: expected an array of {\"key\": ..., \"vector\": [...], \"metadata\": {...}} objects"
+                return
+            }
+
+            var cmd: [String: Any] = [
+                "collection": collection,
+                "vectors": items,
+                "branch": appState.selectedBranch
+            ]
+            if appState.selectedSpace != "default" {
+                cmd["space"] = appState.selectedSpace
+            }
+            let wrapper: [String: Any] = ["VectorBatchUpsert": cmd]
+            let wrapperData = try JSONSerialization.data(withJSONObject: wrapper)
+            let jsonStr = String(data: wrapperData, encoding: .utf8)!
+            let json = try await client.executeRaw(jsonStr)
+
+            if let respData = json.data(using: .utf8),
+               let root = try? JSONSerialization.jsonObject(with: respData) as? [String: Any],
+               let count = root["BatchCount"] as? Int {
+                batchUpsertSuccess = "Upserted \(count) vectors."
+            } else {
+                batchUpsertSuccess = "Batch upsert completed (\(items.count) items)."
+            }
+            await loadCollectionStats()
+        } catch {
+            batchUpsertError = error.localizedDescription
         }
     }
 

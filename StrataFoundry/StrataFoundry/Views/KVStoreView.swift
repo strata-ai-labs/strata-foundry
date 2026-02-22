@@ -27,6 +27,10 @@ struct KVStoreView: View {
     @State private var showDeleteConfirm = false
     @State private var entryToDelete: KVEntry?
     @State private var historyEntry: KVEntry?
+    @State private var showBatchSheet = false
+    @State private var batchJSON = ""
+    @State private var batchError: String?
+    @State private var batchSuccess: String?
 
     // Form fields
     @State private var formKey = ""
@@ -58,6 +62,16 @@ struct KVStoreView: View {
                     Image(systemName: "plus")
                 }
                 .help("Add Key")
+                .disabled(isTimeTraveling)
+                Button {
+                    batchJSON = ""
+                    batchError = nil
+                    batchSuccess = nil
+                    showBatchSheet = true
+                } label: {
+                    Image(systemName: "square.and.arrow.down.on.square")
+                }
+                .help("Batch Import")
                 .disabled(isTimeTraveling)
                 Button {
                     if let entry = selectedEntry {
@@ -165,6 +179,41 @@ struct KVStoreView: View {
                         formValue = String(formValue.dropFirst().dropLast())
                     }
                 }
+        }
+        .sheet(isPresented: $showBatchSheet) {
+            VStack(spacing: 16) {
+                Text("Batch Import (KvBatchPut)")
+                    .font(.headline)
+                Text("JSON array of {\"key\": \"...\", \"value\": {...}} objects")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: $batchJSON)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 200)
+                    .border(Color.secondary.opacity(0.3))
+
+                if let error = batchError {
+                    Text(error).foregroundStyle(.red).font(.callout)
+                }
+                if let success = batchSuccess {
+                    Text(success).foregroundStyle(.green).font(.callout)
+                }
+
+                HStack {
+                    Button("Cancel") { showBatchSheet = false }
+                        .keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Import") {
+                        Task {
+                            await batchPut()
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(batchJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 500, minHeight: 350)
         }
         .alert("Delete Key", isPresented: $showDeleteConfirm) {
             Button("Cancel", role: .cancel) { entryToDelete = nil }
@@ -294,6 +343,35 @@ struct KVStoreView: View {
         }
     }
 
+    private func batchPut() async {
+        guard let client = appState.client else { return }
+        batchError = nil
+        batchSuccess = nil
+        do {
+            guard let data = batchJSON.data(using: .utf8),
+                  let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                batchError = "Invalid JSON: expected an array of {\"key\": \"...\", \"value\": {...}} objects"
+                return
+            }
+
+            var cmd: [String: Any] = [
+                "items": items,
+                "branch": appState.selectedBranch
+            ]
+            if appState.selectedSpace != "default" {
+                cmd["space"] = appState.selectedSpace
+            }
+            let wrapper: [String: Any] = ["KvBatchPut": cmd]
+            let wrapperData = try JSONSerialization.data(withJSONObject: wrapper)
+            let jsonStr = String(data: wrapperData, encoding: .utf8)!
+            _ = try await client.executeRaw(jsonStr)
+            batchSuccess = "Imported \(items.count) keys."
+            await loadEntries()
+        } catch {
+            batchError = error.localizedDescription
+        }
+    }
+
     // MARK: - Load
 
     private func loadEntries() async {
@@ -313,7 +391,19 @@ struct KVStoreView: View {
 
             var newEntries: [KVEntry] = []
             for key in keys {
-                let cmd = "{\"KvGet\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())\(appState.asOfFragment())}}"
+                var getCmd: [String: Any] = [
+                    "key": key,
+                    "branch": appState.selectedBranch
+                ]
+                if appState.selectedSpace != "default" {
+                    getCmd["space"] = appState.selectedSpace
+                }
+                if let date = appState.timeTravelDate {
+                    getCmd["as_of"] = Int64(date.timeIntervalSince1970 * 1_000_000)
+                }
+                let wrapper = ["KvGet": getCmd]
+                let cmdData = try JSONSerialization.data(withJSONObject: wrapper)
+                let cmd = String(data: cmdData, encoding: .utf8)!
                 let getJSON = try await client.executeRaw(cmd)
                 if let d = getJSON.data(using: .utf8),
                    let r = try? JSONSerialization.jsonObject(with: d) as? [String: Any],

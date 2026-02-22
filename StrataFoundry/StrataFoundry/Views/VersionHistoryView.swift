@@ -123,16 +123,33 @@ struct VersionHistoryView: View {
         errorMessage = nil
         defer { isLoading = false }
 
-        let cmd: String
+        let commandName: String
+        let keyField: String
         switch primitive {
         case "Kv":
-            cmd = "{\"KvGetv\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())}}"
+            commandName = "KvGetv"
+            keyField = "key"
         case "State":
-            cmd = "{\"StateGetv\": {\"cell\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())}}"
+            commandName = "StateGetv"
+            keyField = "cell"
         case "Json":
-            cmd = "{\"JsonGetv\": {\"key\": \"\(key)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())}}"
+            commandName = "JsonGetv"
+            keyField = "key"
         default:
             errorMessage = "Unknown primitive: \(primitive)"
+            return
+        }
+        var innerCmd: [String: Any] = [
+            keyField: key,
+            "branch": appState.selectedBranch
+        ]
+        if appState.selectedSpace != "default" {
+            innerCmd["space"] = appState.selectedSpace
+        }
+        let wrapper = [commandName: innerCmd]
+        guard let cmdData = try? JSONSerialization.data(withJSONObject: wrapper),
+              let cmd = String(data: cmdData, encoding: .utf8) else {
+            errorMessage = "Failed to build command"
             return
         }
 

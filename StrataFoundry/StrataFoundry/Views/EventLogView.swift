@@ -25,6 +25,11 @@ struct EventLogView: View {
     @State private var formEventType = ""
     @State private var formPayload = ""
 
+    @State private var showBatchSheet = false
+    @State private var batchJSON = ""
+    @State private var batchError: String?
+    @State private var batchSuccess: String?
+
     private var isTimeTraveling: Bool { appState.timeTravelDate != nil }
 
     var body: some View {
@@ -42,6 +47,16 @@ struct EventLogView: View {
                     Image(systemName: "plus")
                 }
                 .help("Append Event")
+                .disabled(isTimeTraveling)
+                Button {
+                    batchJSON = ""
+                    batchError = nil
+                    batchSuccess = nil
+                    showBatchSheet = true
+                } label: {
+                    Image(systemName: "square.and.arrow.down.on.square")
+                }
+                .help("Batch Append")
                 .disabled(isTimeTraveling)
                 Button {
                     Task { await loadEvents() }
@@ -133,6 +148,48 @@ struct EventLogView: View {
             .padding(20)
             .frame(minWidth: 400)
         }
+        .sheet(isPresented: $showBatchSheet) {
+            VStack(spacing: 16) {
+                Text("Batch Append Events (EventBatchAppend)")
+                    .font(.headline)
+
+                Text("JSON array of {\"event_type\": \"...\", \"payload\": {...}} objects")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                TextEditor(text: $batchJSON)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 150)
+                    .border(Color.secondary.opacity(0.3))
+
+                if let err = batchError {
+                    Text(err)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+                if let success = batchSuccess {
+                    Text(success)
+                        .foregroundStyle(.green)
+                        .font(.caption)
+                }
+
+                HStack {
+                    Button("Cancel") {
+                        showBatchSheet = false
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Import") {
+                        Task { await batchAppend() }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(batchJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 500)
+        }
     }
 
     private func clearForm() {
@@ -171,6 +228,36 @@ struct EventLogView: View {
             await loadEvents()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Batch Append
+
+    private func batchAppend() async {
+        guard let client = appState.client else { return }
+        batchError = nil
+        batchSuccess = nil
+        do {
+            guard let data = batchJSON.data(using: .utf8),
+                  let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                batchError = "Invalid JSON: expected an array of {\"event_type\": \"...\", \"payload\": {...}} objects"
+                return
+            }
+            var cmd: [String: Any] = [
+                "events": items,
+                "branch": appState.selectedBranch
+            ]
+            if appState.selectedSpace != "default" {
+                cmd["space"] = appState.selectedSpace
+            }
+            let wrapper: [String: Any] = ["EventBatchAppend": cmd]
+            let wrapperData = try JSONSerialization.data(withJSONObject: wrapper)
+            let jsonStr = String(data: wrapperData, encoding: .utf8)!
+            _ = try await client.executeRaw(jsonStr)
+            batchSuccess = "Appended \(items.count) events."
+            await loadEvents()
+        } catch {
+            batchError = error.localizedDescription
         }
     }
 

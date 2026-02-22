@@ -16,9 +16,15 @@ struct AdminView: View {
     @State private var autoEmbedEnabled: Bool?
     @State private var autoEmbedError: String?
 
+    // Ping
+    @State private var pingResult: String?
+    @State private var pingError: String?
+
     // Retention
     @State private var retentionMessage: String?
     @State private var retentionError: String?
+    @State private var retentionStats: String?
+    @State private var retentionPreview: String?
 
     // Maintenance
     @State private var flushMessage: String?
@@ -49,6 +55,11 @@ struct AdminView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
+                    // MARK: Connectivity
+                    connectivitySection
+
+                    Divider()
+
                     // MARK: Configuration Section
                     configurationSection
 
@@ -73,6 +84,27 @@ struct AdminView: View {
         }
         .task(id: appState.reloadToken) {
             await loadAll()
+        }
+    }
+
+    // MARK: - Connectivity
+
+    @ViewBuilder
+    private var connectivitySection: some View {
+        HStack {
+            Text("Connectivity")
+                .font(.headline)
+            Spacer()
+            Button("Ping") {
+                Task { await runPing() }
+            }
+        }
+
+        if let result = pingResult {
+            Text(result).foregroundStyle(.green).font(.callout)
+        }
+        if let error = pingError {
+            Text(error).foregroundStyle(.red).font(.callout)
         }
     }
 
@@ -144,6 +176,12 @@ struct AdminView: View {
             Button("Run GC (RetentionApply)") {
                 Task { await runRetention() }
             }
+            Button("Stats") {
+                Task { await loadRetentionStats() }
+            }
+            Button("Preview") {
+                Task { await loadRetentionPreview() }
+            }
         }
 
         if let msg = retentionMessage {
@@ -151,6 +189,24 @@ struct AdminView: View {
         }
         if let error = retentionError {
             Text(error).foregroundStyle(.red).font(.callout)
+        }
+
+        if let stats = retentionStats {
+            GroupBox("Retention Stats") {
+                Text(stats)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+
+        if let preview = retentionPreview {
+            GroupBox("Retention Preview") {
+                Text(preview)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
@@ -236,9 +292,28 @@ struct AdminView: View {
     // MARK: - API Operations
 
     private func loadAll() async {
+        await runPing()
         await loadConfig()
         await loadAutoEmbedStatus()
         await loadDurabilityCounters()
+    }
+
+    private func runPing() async {
+        guard let client = appState.client else { return }
+        pingResult = nil
+        pingError = nil
+        do {
+            let json = try await client.executeRaw("{\"Ping\": null}")
+            if let data = json.data(using: .utf8),
+               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let pong = root["Pong"] as? String {
+                pingResult = "Pong: \(pong)"
+            } else {
+                pingResult = "Connected"
+            }
+        } catch {
+            pingError = error.localizedDescription
+        }
     }
 
     private func loadConfig() async {
@@ -295,9 +370,56 @@ struct AdminView: View {
         guard let client = appState.client else { return }
         retentionMessage = nil
         retentionError = nil
+        retentionStats = nil
+        retentionPreview = nil
         do {
             _ = try await client.executeRaw("{\"RetentionApply\": {}}")
             retentionMessage = "GC completed."
+        } catch {
+            retentionError = error.localizedDescription
+        }
+    }
+
+    private func loadRetentionStats() async {
+        guard let client = appState.client else { return }
+        retentionStats = nil
+        retentionError = nil
+        do {
+            let json = try await client.executeRaw("{\"RetentionStats\": {}}")
+            if let data = json.data(using: .utf8),
+               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                // Try to extract structured data, fall back to raw
+                if let stats = root["RetentionStats"] as? [String: Any] {
+                    let prettyData = try JSONSerialization.data(withJSONObject: stats, options: [.prettyPrinted, .sortedKeys])
+                    retentionStats = String(data: prettyData, encoding: .utf8)
+                } else {
+                    retentionStats = json
+                }
+            } else {
+                retentionStats = json
+            }
+        } catch {
+            retentionError = error.localizedDescription
+        }
+    }
+
+    private func loadRetentionPreview() async {
+        guard let client = appState.client else { return }
+        retentionPreview = nil
+        retentionError = nil
+        do {
+            let json = try await client.executeRaw("{\"RetentionPreview\": {}}")
+            if let data = json.data(using: .utf8),
+               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if let preview = root["RetentionPreview"] as? [String: Any] {
+                    let prettyData = try JSONSerialization.data(withJSONObject: preview, options: [.prettyPrinted, .sortedKeys])
+                    retentionPreview = String(data: prettyData, encoding: .utf8)
+                } else {
+                    retentionPreview = json
+                }
+            } else {
+                retentionPreview = json
+            }
         } catch {
             retentionError = error.localizedDescription
         }

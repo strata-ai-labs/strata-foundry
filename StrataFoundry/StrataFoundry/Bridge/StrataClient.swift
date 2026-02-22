@@ -8,6 +8,37 @@
 
 import Foundation
 
+/// Configuration options for opening a Strata database.
+struct OpenOptions {
+    var accessMode: String = "read_write"  // "read_write" or "read_only"
+    var autoEmbed: Bool? = nil
+    var durability: String? = nil  // "standard" or "always"
+    var modelEndpoint: String? = nil
+    var modelName: String? = nil
+    var modelApiKey: String? = nil
+    var modelTimeoutMs: Int? = nil
+    var embedBatchSize: Int? = nil
+
+    func toJSON() -> String? {
+        var dict: [String: Any] = [:]
+        dict["access_mode"] = accessMode
+        if let autoEmbed { dict["auto_embed"] = autoEmbed }
+        if let durability { dict["durability"] = durability }
+        if let modelEndpoint { dict["model_endpoint"] = modelEndpoint }
+        if let modelName { dict["model_name"] = modelName }
+        if let modelApiKey { dict["model_api_key"] = modelApiKey }
+        if let modelTimeoutMs { dict["model_timeout_ms"] = modelTimeoutMs }
+        if let embedBatchSize { dict["embed_batch_size"] = embedBatchSize }
+
+        // If only default access_mode and nothing else, return nil (use defaults)
+        if dict.count == 1 && accessMode == "read_write" { return nil }
+
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let str = String(data: data, encoding: .utf8) else { return nil }
+        return str
+    }
+}
+
 /// Errors from the Strata bridge.
 enum StrataError: Error, LocalizedError {
     case notOpen
@@ -87,11 +118,18 @@ final class StrataClient: @unchecked Sendable {
         handle = id
     }
 
-    /// Open a database at a filesystem path.
-    func open(path: String) async throws(StrataError) {
+    /// Open a database at a filesystem path with optional OpenOptions.
+    func open(path: String, options: OpenOptions? = nil) async throws(StrataError) {
+        let optionsJSON = options?.toJSON()
         let response = await ffiCall {
             path.withCString { cPath in
-                withStrataString { _strata_open(cPath, nil) }
+                if let json = optionsJSON {
+                    return json.withCString { cConfig in
+                        withStrataString { _strata_open(cPath, cConfig) }
+                    }
+                } else {
+                    return withStrataString { _strata_open(cPath, nil) }
+                }
             }
         }
         let id: UInt64 = try BridgeResponse(raw: response).okValue { ($0 as? NSNumber)?.uint64Value }

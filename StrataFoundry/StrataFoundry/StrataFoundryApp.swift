@@ -9,24 +9,38 @@ import SwiftUI
 
 @main
 struct StrataFoundryApp: App {
-    @State private var appState = AppState()
+    @State private var workspace = WorkspaceState()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(appState)
+                .environment(workspace)
         }
         .commands {
             CommandGroup(after: .newItem) {
                 Button("Open Database...") {
-                    appState.showOpenPanel = true
+                    workspace.showOpenPanel = true
                 }
                 .keyboardShortcut("o", modifiers: .command)
 
                 Button("New Database...") {
-                    appState.showCreatePanel = true
+                    workspace.showCreatePanel = true
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
+
+                Divider()
+
+                Button("New Tab") {
+                    workspace.addTab()
+                }
+                .keyboardShortcut("t", modifiers: .command)
+
+                Button("Close Tab") {
+                    if let id = workspace.activeSessionId {
+                        workspace.closeTab(id)
+                    }
+                }
+                .disabled(workspace.sessions.count <= 1 && !(workspace.activeSession?.isOpen ?? false))
             }
         }
     }

@@ -15,6 +15,9 @@ final class AppState {
     /// Path of the open database (nil for in-memory).
     var databasePath: String?
 
+    /// OpenOptions used when opening the current database.
+    var openOptions: OpenOptions?
+
     /// Info about the open database.
     var databaseInfo: DatabaseInfo?
 
@@ -85,16 +88,17 @@ final class AppState {
         return "In-Memory"
     }
 
-    /// Open a database at a filesystem path.
-    func openDatabase(at path: String) async {
+    /// Open a database at a filesystem path with optional configuration.
+    func openDatabase(at path: String, options: OpenOptions? = nil) async {
         // Close existing if open
         closeDatabase()
 
         let newClient = StrataClient()
         do {
-            try await newClient.open(path: path)
+            try await newClient.open(path: path, options: options)
             client = newClient
             databasePath = path
+            openOptions = options
             await refreshInfo()
             await loadBranches()
             await loadSpaces()
@@ -104,16 +108,17 @@ final class AppState {
         }
     }
 
-    /// Create a new database at a path.
-    func createDatabase(at path: String) async {
+    /// Create a new database at a path with optional configuration.
+    func createDatabase(at path: String, options: OpenOptions? = nil) async {
         closeDatabase()
 
         let newClient = StrataClient()
         do {
             // strata_open creates the database if it doesn't exist
-            try await newClient.open(path: path)
+            try await newClient.open(path: path, options: options)
             client = newClient
             databasePath = path
+            openOptions = options
             await refreshInfo()
             await loadBranches()
             await loadSpaces()
@@ -128,6 +133,7 @@ final class AppState {
         client?.close()
         client = nil
         databasePath = nil
+        openOptions = nil
         databaseInfo = nil
         selectedBranch = "default"
         branches = []

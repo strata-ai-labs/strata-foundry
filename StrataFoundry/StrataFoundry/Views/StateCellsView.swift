@@ -26,6 +26,10 @@ struct StateCellsView: View {
     @State private var showDeleteConfirm = false
     @State private var cellToDelete: StateCellEntry?
     @State private var historyCell: StateCellEntry?
+    @State private var showBatchSheet = false
+    @State private var batchJSON = ""
+    @State private var batchError: String?
+    @State private var batchSuccess: String?
 
     // Form fields
     @State private var formCell = ""
@@ -49,6 +53,16 @@ struct StateCellsView: View {
                     Image(systemName: "plus")
                 }
                 .help("Add Cell")
+                .disabled(isTimeTraveling)
+                Button {
+                    batchJSON = ""
+                    batchError = nil
+                    batchSuccess = nil
+                    showBatchSheet = true
+                } label: {
+                    Image(systemName: "square.and.arrow.down.on.square")
+                }
+                .help("Batch Import")
                 .disabled(isTimeTraveling)
                 Button {
                     if let cell = selectedCell {
@@ -155,6 +169,43 @@ struct StateCellsView: View {
                         formValue = String(formValue.dropFirst().dropLast())
                     }
                 }
+        }
+        .sheet(isPresented: $showBatchSheet) {
+            VStack(spacing: 16) {
+                Text("Batch Import (StateBatchSet)")
+                    .font(.headline)
+                Text("JSON array of {\"cell\": \"...\", \"value\": {...}} objects")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: $batchJSON)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 150)
+                    .border(Color.secondary.opacity(0.3))
+                if let err = batchError {
+                    Text(err)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+                if let success = batchSuccess {
+                    Text(success)
+                        .foregroundStyle(.green)
+                        .font(.caption)
+                }
+                HStack {
+                    Button("Cancel") {
+                        showBatchSheet = false
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Import") {
+                        Task { await batchSet() }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(batchJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 450, minHeight: 300)
         }
         .alert("Delete Cell", isPresented: $showDeleteConfirm) {
             Button("Cancel", role: .cancel) { cellToDelete = nil }
@@ -284,6 +335,34 @@ struct StateCellsView: View {
         }
     }
 
+    private func batchSet() async {
+        guard let client = appState.client else { return }
+        batchError = nil
+        batchSuccess = nil
+        do {
+            guard let data = batchJSON.data(using: .utf8),
+                  let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                batchError = "Invalid JSON: expected an array of {\"cell\": \"...\", \"value\": {...}} objects"
+                return
+            }
+            var cmd: [String: Any] = [
+                "items": items,
+                "branch": appState.selectedBranch
+            ]
+            if appState.selectedSpace != "default" {
+                cmd["space"] = appState.selectedSpace
+            }
+            let wrapper: [String: Any] = ["StateBatchSet": cmd]
+            let wrapperData = try JSONSerialization.data(withJSONObject: wrapper)
+            let jsonStr = String(data: wrapperData, encoding: .utf8)!
+            _ = try await client.executeRaw(jsonStr)
+            batchSuccess = "Imported \(items.count) cells."
+            await loadCells()
+        } catch {
+            batchError = error.localizedDescription
+        }
+    }
+
     // MARK: - Load
 
     private func loadCells() async {
@@ -303,7 +382,19 @@ struct StateCellsView: View {
 
             var newCells: [StateCellEntry] = []
             for name in keys {
-                let cmd = "{\"StateGet\": {\"cell\": \"\(name)\", \"branch\": \"\(appState.selectedBranch)\"\(appState.spaceFragment())\(appState.asOfFragment())}}"
+                var getCmd: [String: Any] = [
+                    "cell": name,
+                    "branch": appState.selectedBranch
+                ]
+                if appState.selectedSpace != "default" {
+                    getCmd["space"] = appState.selectedSpace
+                }
+                if let date = appState.timeTravelDate {
+                    getCmd["as_of"] = Int64(date.timeIntervalSince1970 * 1_000_000)
+                }
+                let wrapper = ["StateGet": getCmd]
+                let cmdData = try JSONSerialization.data(withJSONObject: wrapper)
+                let cmd = String(data: cmdData, encoding: .utf8)!
                 let getJSON = try await client.executeRaw(cmd)
                 if let d = getJSON.data(using: .utf8),
                    let r = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
