@@ -14,6 +14,7 @@ enum Primitive: String, CaseIterable, Identifiable, Hashable {
     case events = "Event Log"
     case json = "JSON Store"
     case vectors = "Vector Store"
+    case graph = "Graph"
 
     var id: String { rawValue }
 
@@ -24,6 +25,25 @@ enum Primitive: String, CaseIterable, Identifiable, Hashable {
         case .events: return "list.bullet.clipboard"
         case .json: return "doc.text"
         case .vectors: return "arrow.trianglehead.branch"
+        case .graph: return "circle.hexagongrid"
+        }
+    }
+}
+
+enum TopLevelItem: String, CaseIterable, Identifiable, Hashable {
+    case search = "Search"
+    case models = "Models"
+    case generation = "Generation"
+    case admin = "Admin"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .search: return "magnifyingglass"
+        case .models: return "cpu"
+        case .generation: return "text.bubble"
+        case .admin: return "gearshape.2"
         }
     }
 }
@@ -31,6 +51,7 @@ enum Primitive: String, CaseIterable, Identifiable, Hashable {
 enum SidebarSelection: Hashable {
     case info
     case primitive(space: String, primitive: Primitive)
+    case topLevel(TopLevelItem)
 }
 
 struct DatabaseView: View {
@@ -54,6 +75,26 @@ struct DatabaseView: View {
     @State private var showValidateResult: BundleValidateResult?
     @State private var isBranchOperationInProgress = false
 
+    // Branch Fork
+    @State private var showForkSheet = false
+    @State private var forkDestination = ""
+    @State private var forkError: String?
+
+    // Branch Diff
+    @State private var showDiffSheet = false
+    @State private var diffBranchA = ""
+    @State private var diffBranchB = ""
+    @State private var diffResult: String?
+    @State private var diffError: String?
+
+    // Branch Merge
+    @State private var showMergeSheet = false
+    @State private var mergeSource = ""
+    @State private var mergeTarget = ""
+    @State private var mergeStrategy = "source_wins"
+    @State private var mergeError: String?
+    @State private var mergeResult: String?
+
     var body: some View {
         @Bindable var appState = appState
         NavigationSplitView {
@@ -67,6 +108,13 @@ struct DatabaseView: View {
                             Label(prim.rawValue, systemImage: prim.icon)
                                 .tag(SidebarSelection.primitive(space: space, primitive: prim))
                         }
+                    }
+                }
+
+                Section("Tools") {
+                    ForEach(TopLevelItem.allCases) { item in
+                        Label(item.rawValue, systemImage: item.icon)
+                            .tag(SidebarSelection.topLevel(item))
                     }
                 }
             }
@@ -160,6 +208,19 @@ struct DatabaseView: View {
                     JsonStoreView()
                 case .vectors:
                     VectorStoreView()
+                case .graph:
+                    GraphView()
+                }
+            case .topLevel(let item):
+                switch item {
+                case .search:
+                    SearchView()
+                case .models:
+                    ModelsView()
+                case .generation:
+                    GenerationView()
+                case .admin:
+                    AdminView()
                 }
             }
         }
@@ -193,6 +254,49 @@ struct DatabaseView: View {
                 }
                 .help("Delete branch")
                 .disabled(appState.selectedBranch == "default" || appState.timeTravelDate != nil)
+            }
+
+            // Branch Fork
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    forkDestination = ""
+                    forkError = nil
+                    showForkSheet = true
+                } label: {
+                    Image(systemName: "arrow.triangle.branch")
+                }
+                .help("Fork branch")
+                .disabled(appState.timeTravelDate != nil)
+            }
+
+            // Branch Diff
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    diffBranchA = appState.selectedBranch
+                    diffBranchB = appState.branches.first(where: { $0 != appState.selectedBranch }) ?? "default"
+                    diffResult = nil
+                    diffError = nil
+                    showDiffSheet = true
+                } label: {
+                    Image(systemName: "arrow.left.arrow.right")
+                }
+                .help("Diff branches")
+            }
+
+            // Branch Merge
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    mergeSource = appState.selectedBranch
+                    mergeTarget = appState.branches.first(where: { $0 != appState.selectedBranch }) ?? "default"
+                    mergeStrategy = "source_wins"
+                    mergeError = nil
+                    mergeResult = nil
+                    showMergeSheet = true
+                } label: {
+                    Image(systemName: "arrow.triangle.merge")
+                }
+                .help("Merge branches")
+                .disabled(appState.timeTravelDate != nil || appState.branches.count < 2)
             }
 
             ToolbarItem(placement: .automatic) {
@@ -309,6 +413,158 @@ struct DatabaseView: View {
             }
         } message: {
             Text("Are you sure you want to delete the branch \"\(appState.selectedBranch)\"? This cannot be undone.")
+        }
+        // Fork sheet
+        .sheet(isPresented: $showForkSheet) {
+            VStack(spacing: 16) {
+                Text("Fork Branch").font(.headline)
+                LabeledContent("Source") {
+                    Text(appState.selectedBranch)
+                        .font(.system(.body, design: .monospaced))
+                }
+                TextField("Destination branch name", text: $forkDestination)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 250)
+                if let forkError {
+                    Text(forkError)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+                HStack {
+                    Button("Cancel") {
+                        showForkSheet = false
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Fork") {
+                        Task {
+                            do {
+                                try await appState.forkBranch(
+                                    source: appState.selectedBranch,
+                                    destination: forkDestination
+                                )
+                                showForkSheet = false
+                            } catch {
+                                forkError = error.localizedDescription
+                            }
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(forkDestination.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 350)
+        }
+        // Diff sheet
+        .sheet(isPresented: $showDiffSheet) {
+            VStack(spacing: 16) {
+                Text("Diff Branches").font(.headline)
+                Picker("Branch A", selection: $diffBranchA) {
+                    ForEach(appState.branches, id: \.self) { b in
+                        Text(b).tag(b)
+                    }
+                }
+                Picker("Branch B", selection: $diffBranchB) {
+                    ForEach(appState.branches, id: \.self) { b in
+                        Text(b).tag(b)
+                    }
+                }
+                HStack {
+                    Button("Cancel") {
+                        showDiffSheet = false
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Diff") {
+                        Task {
+                            do {
+                                diffResult = try await appState.diffBranches(
+                                    branchA: diffBranchA,
+                                    branchB: diffBranchB
+                                )
+                            } catch {
+                                diffError = error.localizedDescription
+                            }
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(diffBranchA == diffBranchB)
+                }
+                if let diffError {
+                    Text(diffError)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+                if let diffResult {
+                    GroupBox("Diff Result") {
+                        ScrollView {
+                            Text(diffResult)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 300)
+                    }
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 500, minHeight: 300)
+        }
+        // Merge sheet
+        .sheet(isPresented: $showMergeSheet) {
+            VStack(spacing: 16) {
+                Text("Merge Branches").font(.headline)
+                Picker("Source", selection: $mergeSource) {
+                    ForEach(appState.branches, id: \.self) { b in
+                        Text(b).tag(b)
+                    }
+                }
+                Picker("Target", selection: $mergeTarget) {
+                    ForEach(appState.branches, id: \.self) { b in
+                        Text(b).tag(b)
+                    }
+                }
+                Picker("Strategy", selection: $mergeStrategy) {
+                    Text("Source Wins").tag("source_wins")
+                    Text("Target Wins").tag("target_wins")
+                }
+                .pickerStyle(.segmented)
+                if let mergeError {
+                    Text(mergeError)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+                if let mergeResult {
+                    Text(mergeResult)
+                        .foregroundStyle(.green)
+                        .font(.callout)
+                }
+                HStack {
+                    Button("Cancel") {
+                        showMergeSheet = false
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Merge") {
+                        Task {
+                            do {
+                                mergeResult = try await appState.mergeBranches(
+                                    source: mergeSource,
+                                    target: mergeTarget,
+                                    strategy: mergeStrategy
+                                )
+                            } catch {
+                                mergeError = error.localizedDescription
+                            }
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(mergeSource == mergeTarget)
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 400)
         }
         .alert("Branch Exported",
                isPresented: Binding(

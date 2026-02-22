@@ -308,6 +308,64 @@ final class AppState {
         )
     }
 
+    // MARK: - Branch Advanced Operations
+
+    /// Fork a branch to a new destination.
+    func forkBranch(source: String, destination: String) async throws {
+        guard let client else {
+            throw NSError(domain: "AppState", code: 1, userInfo: [NSLocalizedDescriptionKey: "No database open"])
+        }
+        let wrapper: [String: Any] = ["BranchFork": ["source": source, "destination": destination]]
+        let data = try JSONSerialization.data(withJSONObject: wrapper)
+        let jsonStr = String(data: data, encoding: .utf8)!
+        _ = try await client.executeRaw(jsonStr)
+        await loadBranches()
+    }
+
+    /// Diff two branches — returns formatted diff string.
+    func diffBranches(branchA: String, branchB: String) async throws -> String {
+        guard let client else {
+            throw NSError(domain: "AppState", code: 1, userInfo: [NSLocalizedDescriptionKey: "No database open"])
+        }
+        let wrapper: [String: Any] = ["BranchDiff": ["branch_a": branchA, "branch_b": branchB]]
+        let data = try JSONSerialization.data(withJSONObject: wrapper)
+        let jsonStr = String(data: data, encoding: .utf8)!
+        let json = try await client.executeRaw(jsonStr)
+
+        if let respData = json.data(using: .utf8),
+           let root = try? JSONSerialization.jsonObject(with: respData) as? [String: Any],
+           let diff = root["BranchDiff"] {
+            if let prettyData = try? JSONSerialization.data(withJSONObject: diff, options: [.prettyPrinted, .sortedKeys]),
+               let str = String(data: prettyData, encoding: .utf8) {
+                return str
+            }
+            return "\(diff)"
+        }
+        return json
+    }
+
+    /// Merge source branch into target with given strategy.
+    func mergeBranches(source: String, target: String, strategy: String) async throws -> String {
+        guard let client else {
+            throw NSError(domain: "AppState", code: 1, userInfo: [NSLocalizedDescriptionKey: "No database open"])
+        }
+        let wrapper: [String: Any] = ["BranchMerge": [
+            "source": source,
+            "target": target,
+            "strategy": strategy
+        ]]
+        let data = try JSONSerialization.data(withJSONObject: wrapper)
+        let jsonStr = String(data: data, encoding: .utf8)!
+        let json = try await client.executeRaw(jsonStr)
+
+        if let respData = json.data(using: .utf8),
+           let root = try? JSONSerialization.jsonObject(with: respData) as? [String: Any],
+           root["BranchMerged"] != nil {
+            return "Merged \(source) into \(target) (\(strategy))."
+        }
+        return "Merge completed."
+    }
+
     /// Refresh database info.
     func refreshInfo() async {
         guard let client else { return }
