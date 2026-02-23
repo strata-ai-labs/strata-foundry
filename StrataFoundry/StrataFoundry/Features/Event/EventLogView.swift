@@ -29,6 +29,19 @@ struct EventLogView: View {
 
     @ToolbarContentBuilder
     private var eventToolbar: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            Picker("View", selection: Binding(
+                get: { model?.viewMode ?? .table },
+                set: { model?.viewMode = $0 }
+            )) {
+                ForEach(EventViewMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 200)
+        }
+
         ToolbarItem(placement: .primaryAction) {
             Menu {
                 Button {
@@ -62,7 +75,7 @@ struct EventLogView: View {
 
     var body: some View {
         mainContent
-            .navigationTitle("Event Log")
+            .navigationTitle("Events")
             .navigationSubtitle(model.map { "\($0.eventCount) events" } ?? "")
             .searchable(text: filterBinding, prompt: "Filter by event type...")
             .toolbar { eventToolbar }
@@ -113,39 +126,52 @@ struct EventLogView: View {
             emptyIcon: "list.bullet.clipboard",
             emptyText: "No events in log"
         ) {
-            Table(
-                model.filteredEvents,
-                selection: Binding(
-                    get: { model.selectedEventId },
-                    set: { model.selectedEventId = $0 }
-                )
-            ) {
-                TableColumn("Seq") { event in
-                    Text("#\(event.sequence)")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                }
-                .width(40)
+            Group {
+                switch model.viewMode {
+                case .table:
+                    Table(
+                        model.filteredEvents,
+                        selection: Binding(
+                            get: { model.selectedEventId },
+                            set: { model.selectedEventId = $0 }
+                        )
+                    ) {
+                        TableColumn("Seq") { event in
+                            Text("#\(event.sequence)")
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .width(40)
 
-                TableColumn("Type") { event in
-                    Text(event.eventType)
-                        .strataKeyStyle()
-                }
-                .width(min: 80, ideal: 120)
+                        TableColumn("Type") { event in
+                            Text(event.eventType)
+                                .strataKeyStyle()
+                        }
+                        .width(min: 80, ideal: 120)
 
-                TableColumn("Summary") { event in
-                    Text(event.summary)
-                        .strataSecondaryStyle()
-                        .lineLimit(2)
-                }
-                .width(min: 200, ideal: 400)
+                        TableColumn("Summary") { event in
+                            Text(event.summary)
+                                .strataSecondaryStyle()
+                                .lineLimit(2)
+                        }
+                        .width(min: 200, ideal: 400)
 
-                TableColumn("Timestamp") { event in
-                    Text(event.timestamp > 0 ? formatTimestampShort(event.timestamp) : "")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        TableColumn("Timestamp") { event in
+                            Text(event.timestamp > 0 ? formatTimestampShort(event.timestamp) : "")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .width(min: 100, ideal: 140)
+                    }
+                case .timeline:
+                    EventTimeline(
+                        events: model.filteredEvents,
+                        selectedEventId: Binding(
+                            get: { model.selectedEventId },
+                            set: { model.selectedEventId = $0 }
+                        )
+                    )
                 }
-                .width(min: 100, ideal: 140)
             }
             .inspector(isPresented: Binding(
                 get: { model.showInspector },

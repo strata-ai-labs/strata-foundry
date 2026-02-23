@@ -55,7 +55,7 @@ struct StateCellsView: View {
 
     var body: some View {
         mainContent
-            .navigationTitle("State Cells")
+            .navigationTitle("State")
             .navigationSubtitle(model.map { "\($0.cells.count) cells" } ?? "")
             .toolbar { stateToolbar }
             .background {
@@ -156,9 +156,7 @@ struct StateCellsView: View {
                 .width(min: 120, ideal: 200)
 
                 TableColumn("Value") { cell in
-                    Text(cell.displayValue)
-                        .strataSecondaryStyle()
-                        .lineLimit(1)
+                    SyntaxHighlightedValue(value: cell.rawValue)
                 }
                 .width(min: 150, ideal: 300)
 
@@ -225,13 +223,18 @@ struct StateCellsView: View {
 
                     Text("Value")
                         .strataSectionHeader()
-                    Text(cell.displayValue)
-                        .strataCodeStyle()
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(StrataSpacing.xs)
-                        .background(.quaternary.opacity(0.5))
-                        .clipShape(RoundedRectangle(cornerRadius: StrataRadius.sm))
+                    Group {
+                        switch cell.rawValue {
+                        case .object, .array:
+                            JSONTreeView(value: cell.rawValue, initialExpandDepth: 2)
+                        default:
+                            SyntaxHighlightedValue(value: cell.rawValue)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(StrataSpacing.xs)
+                    .background(.quaternary.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: StrataRadius.sm))
 
                     Divider()
 

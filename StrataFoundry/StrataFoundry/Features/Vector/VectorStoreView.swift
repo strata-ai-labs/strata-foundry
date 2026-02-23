@@ -19,7 +19,7 @@ struct VectorStoreView: View {
                 SkeletonLoadingView()
             }
         }
-        .navigationTitle("Vector Store")
+        .navigationTitle("Vectors")
         .navigationSubtitle(model.map { "\($0.collections.count) collections" } ?? "")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -405,12 +405,19 @@ struct VectorStoreView: View {
                         get: { model.selectedMatch },
                         set: { model.selectedMatch = $0 }
                     )) { match in
-                        HStack {
-                            Text(match.key)
-                                .strataKeyStyle()
-                            Spacer()
-                            Text(String(format: "%.4f", match.score))
-                                .strataBadgeStyle()
+                        VStack(alignment: .leading, spacing: StrataSpacing.xxs) {
+                            HStack {
+                                Text(match.key)
+                                    .strataKeyStyle()
+                                Spacer()
+                                Text(String(format: "%.4f", match.score))
+                                    .strataBadgeStyle()
+                            }
+                            ScoreBar(
+                                score: match.score,
+                                maxScore: model.searchResults.first?.score ?? 1.0,
+                                compact: true
+                            )
                         }
                         .tag(match.key)
                     }

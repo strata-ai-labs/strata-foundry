@@ -8,6 +8,7 @@ final class JsonFeatureModel {
     var keys: [String] = []
     var selectedKey: String?
     var documentJSON: String = ""
+    var documentValue: StrataValue? = nil
     var isLoading = false
     var errorMessage: String?
     var showHistory = false
@@ -58,11 +59,14 @@ final class JsonFeatureModel {
         do {
             if let vv = try await jsonService.get(key: key, branch: branch, space: space, asOf: asOf) {
                 documentJSON = vv.value.prettyJSON
+                documentValue = vv.value
             } else {
                 documentJSON = ""
+                documentValue = nil
             }
         } catch {
             documentJSON = "Error: \(error.localizedDescription)"
+            documentValue = nil
         }
     }
 
@@ -97,6 +101,7 @@ final class JsonFeatureModel {
             if selectedKey == key {
                 selectedKey = nil
                 documentJSON = ""
+                documentValue = nil
             }
             await loadKeys()
         } catch {
@@ -135,6 +140,7 @@ final class JsonFeatureModel {
 
     func onSelectKey(_ key: String?) {
         showHistory = false
+        documentValue = nil
         selectedKey = key
         if let key {
             Task { await loadDocument(key: key) }

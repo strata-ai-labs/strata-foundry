@@ -8,6 +8,11 @@ struct EventEntryDisplay: Identifiable {
     let timestamp: UInt64
 }
 
+enum EventViewMode: String, CaseIterable {
+    case table = "Table"
+    case timeline = "Timeline"
+}
+
 @Observable
 final class EventFeatureModel {
     private let eventService: EventService
@@ -20,6 +25,7 @@ final class EventFeatureModel {
     var selectedEventId: EventEntryDisplay.ID?
     var showInspector = false
     var filterText = ""
+    var viewMode: EventViewMode = .table
 
     var selectedEvent: EventEntryDisplay? {
         events.first(where: { $0.id == selectedEventId })

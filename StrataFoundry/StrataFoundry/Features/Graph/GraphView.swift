@@ -21,7 +21,7 @@ struct GraphView: View {
                 SkeletonLoadingView()
             }
         }
-        .navigationTitle("Graph Explorer")
+        .navigationTitle("Graph")
         .navigationSubtitle(model.map { "\($0.graphs.count) graphs" } ?? "")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -186,23 +186,29 @@ struct GraphView: View {
                     Divider()
                 }
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: StrataSpacing.sm) {
-                        switch model.graphMode {
-                        case .nodes:
-                            nodesModeView(model)
-                        case .edges:
-                            edgesModeView(model)
-                        case .neighbors:
-                            neighborsModeView(model)
-                        case .bfs:
-                            bfsModeView(model)
-                        case .bulkInsert:
-                            bulkInsertModeView(model)
+                if model.graphMode == .visualize {
+                    visualizeModeView(model)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                            switch model.graphMode {
+                            case .nodes:
+                                nodesModeView(model)
+                            case .edges:
+                                edgesModeView(model)
+                            case .neighbors:
+                                neighborsModeView(model)
+                            case .bfs:
+                                bfsModeView(model)
+                            case .bulkInsert:
+                                bulkInsertModeView(model)
+                            case .visualize:
+                                EmptyView()
+                            }
                         }
+                        .padding(StrataSpacing.md)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .padding(StrataSpacing.md)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         } else {
@@ -535,6 +541,50 @@ struct GraphView: View {
                 }
                 .padding(StrataSpacing.xs)
             }
+        }
+    }
+
+    // MARK: - Visualize Mode
+
+    @ViewBuilder
+    private func visualizeModeView(_ model: GraphFeatureModel) -> some View {
+        if model.isLoadingViz {
+            VStack {
+                Spacer()
+                ProgressView("Loading graph data...")
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let error = model.vizError {
+            VStack {
+                Spacer()
+                StrataErrorCallout(message: error)
+                Button("Retry") {
+                    Task { await model.loadVisualizationData() }
+                }
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.vizNodes.isEmpty {
+            EmptyStateView(
+                icon: "circle.hexagongrid",
+                title: "No graph data",
+                subtitle: "Add nodes and edges to visualize"
+            )
+            .task {
+                await model.loadVisualizationData()
+            }
+        } else {
+            GraphCanvasView(
+                nodes: model.vizNodes,
+                edges: model.vizEdges,
+                selectedNodeId: nil,
+                onNodeTap: { nodeId in
+                    model.graphMode = .nodes
+                    model.nodeIdField = nodeId
+                    Task { await model.getNode(nodeId: nodeId) }
+                }
+            )
         }
     }
 

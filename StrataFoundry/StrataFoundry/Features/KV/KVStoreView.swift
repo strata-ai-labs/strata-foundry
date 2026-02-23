@@ -62,7 +62,7 @@ struct KVStoreView: View {
 
     var body: some View {
         mainContent
-            .navigationTitle("KV Store")
+            .navigationTitle("Key-Value")
             .navigationSubtitle(model.map { "\($0.filteredEntries.count) keys" } ?? "")
             .searchable(text: filterBinding, prompt: "Filter keys...")
             .toolbar { kvToolbar }
@@ -164,9 +164,7 @@ struct KVStoreView: View {
                 .width(min: 120, ideal: 200)
 
                 TableColumn("Value") { entry in
-                    Text(entry.displayValue)
-                        .strataSecondaryStyle()
-                        .lineLimit(1)
+                    SyntaxHighlightedValue(value: entry.rawValue)
                 }
                 .width(min: 150, ideal: 300)
 
@@ -233,13 +231,18 @@ struct KVStoreView: View {
 
                     Text("Value")
                         .strataSectionHeader()
-                    Text(entry.displayValue)
-                        .strataCodeStyle()
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(StrataSpacing.xs)
-                        .background(.quaternary.opacity(0.5))
-                        .clipShape(RoundedRectangle(cornerRadius: StrataRadius.sm))
+                    Group {
+                        switch entry.rawValue {
+                        case .object, .array:
+                            JSONTreeView(value: entry.rawValue, initialExpandDepth: 2)
+                        default:
+                            SyntaxHighlightedValue(value: entry.rawValue)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(StrataSpacing.xs)
+                    .background(.quaternary.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: StrataRadius.sm))
 
                     Divider()
 

@@ -17,32 +17,46 @@ struct DatabaseInfoView: View {
                 .fontWeight(.semibold)
 
             if let info = appState.databaseInfo {
-                Grid(alignment: .leading, horizontalSpacing: StrataSpacing.md, verticalSpacing: StrataSpacing.sm) {
-                    GridRow {
-                        Text("Path")
+                GroupBox {
+                    HStack(spacing: StrataSpacing.xs) {
+                        Image(systemName: "externaldrive.fill")
                             .foregroundStyle(.secondary)
                         Text(appState.databasePath ?? "In-Memory")
+                            .font(.system(.callout, design: .monospaced))
                             .textSelection(.enabled)
                     }
-                    GridRow {
-                        Text("Version")
-                            .foregroundStyle(.secondary)
-                        Text(info.version)
-                    }
-                    GridRow {
-                        Text("Branches")
-                            .foregroundStyle(.secondary)
-                        Text("\(info.branchCount)")
-                            .contentTransition(.numericText())
-                    }
-                    GridRow {
-                        Text("Total Keys")
-                            .foregroundStyle(.secondary)
-                        Text("\(info.totalKeys)")
-                            .contentTransition(.numericText())
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .font(.body)
+
+                LazyVGrid(columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ], spacing: StrataSpacing.sm) {
+                    DashboardCard(
+                        title: "Version",
+                        value: info.version,
+                        icon: "tag.fill",
+                        iconColor: .gray
+                    )
+                    DashboardCard(
+                        title: "Uptime",
+                        value: formatUptime(info.uptimeSecs),
+                        icon: "clock.fill",
+                        iconColor: .green
+                    )
+                    DashboardCard(
+                        title: "Branches",
+                        value: "\(info.branchCount)",
+                        icon: "arrow.triangle.branch",
+                        iconColor: .orange
+                    )
+                    DashboardCard(
+                        title: "Total Keys",
+                        value: "\(info.totalKeys)",
+                        icon: "key.fill",
+                        iconColor: .purple
+                    )
+                }
                 .transition(.opacity)
             } else {
                 SkeletonLoadingView(rows: 4, columns: 2)

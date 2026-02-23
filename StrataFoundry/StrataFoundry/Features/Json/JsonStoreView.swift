@@ -64,7 +64,7 @@ struct JsonStoreView: View {
 
     var body: some View {
         mainContent
-            .navigationTitle("JSON Store")
+            .navigationTitle("JSON")
             .navigationSubtitle(model.map { "\($0.keys.count) documents" } ?? "")
             .searchable(text: filterBinding, prompt: "Filter documents...")
             .toolbar { jsonToolbar }
@@ -174,7 +174,10 @@ struct JsonStoreView: View {
                         VersionHistoryView(primitive: "Json", key: key)
                     } else {
                         ScrollView {
-                            if model.documentJSON.isEmpty {
+                            if let value = model.documentValue {
+                                JSONTreeView(value: value, rootLabel: model.selectedKey, initialExpandDepth: 3)
+                                    .padding(StrataSpacing.md)
+                            } else if model.documentJSON.isEmpty {
                                 EmptyStateView(
                                     icon: "doc.text",
                                     title: "Select a document"

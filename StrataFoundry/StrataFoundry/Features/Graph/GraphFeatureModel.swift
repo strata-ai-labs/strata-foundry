@@ -5,6 +5,7 @@ enum GraphPaneMode: String, CaseIterable {
     case edges = "Edges"
     case neighbors = "Neighbors"
     case bfs = "BFS"
+    case visualize = "Visualize"
     case bulkInsert = "Bulk Insert"
 }
 
@@ -77,6 +78,12 @@ final class GraphFeatureModel {
     var bulkJSON = ""
     var bulkResult: String?
     var bulkError: String?
+
+    // Visualization
+    var vizNodes: [GraphCanvasNode] = []
+    var vizEdges: [GraphCanvasEdge] = []
+    var isLoadingViz = false
+    var vizError: String?
 
     var isTimeTraveling: Bool { appState.timeTravelDate != nil }
 
@@ -320,6 +327,63 @@ final class GraphFeatureModel {
         }
     }
 
+    // MARK: - Visualization
+
+    func loadVisualizationData() async {
+        guard let graphName = selectedGraph else { return }
+        isLoadingViz = true
+        vizError = nil
+        defer { isLoadingViz = false }
+
+        do {
+            // Use all nodes from nodeList as starting points; do BFS from first node
+            if nodeList.isEmpty {
+                await loadNodes()
+            }
+            guard let startNode = nodeList.first else {
+                vizError = "No nodes in graph"
+                return
+            }
+
+            let result = try await graphService.bfs(
+                graph: graphName,
+                start: startNode,
+                maxDepth: 100,
+                maxNodes: 500,
+                direction: "both",
+                branch: appState.selectedBranch
+            )
+
+            // Build node set from visited nodes
+            var nodeIds = Set(result.visited)
+
+            // Also add any nodes not reachable from BFS (disconnected components)
+            for nodeId in nodeList.prefix(500) {
+                nodeIds.insert(nodeId)
+            }
+
+            vizNodes = nodeIds.map { GraphCanvasNode(id: $0, label: $0) }
+
+            // Build edges from BFS result
+            var edgeSet = Set<String>()
+            var edges: [GraphCanvasEdge] = []
+            for parsed in result.parsedEdges {
+                let edgeId = "\(parsed.src)->\(parsed.dst):\(parsed.edgeType)"
+                if edgeSet.insert(edgeId).inserted {
+                    edges.append(GraphCanvasEdge(
+                        id: edgeId,
+                        source: parsed.src,
+                        target: parsed.dst,
+                        edgeType: parsed.edgeType
+                    ))
+                }
+            }
+            vizEdges = edges
+        } catch {
+            vizError = error.localizedDescription
+        }
+    }
+
     // MARK: - State Management
 
     func resetRightPaneState() {
@@ -352,6 +416,10 @@ final class GraphFeatureModel {
         bulkJSON = ""
         bulkResult = nil
         bulkError = nil
+        vizNodes = []
+        vizEdges = []
+        isLoadingViz = false
+        vizError = nil
     }
 
     func onSelectGraph(_ name: String?) {

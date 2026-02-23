@@ -150,26 +150,32 @@ struct SearchView: View {
                         .strataCountStyle()
 
                     ForEach(model.results) { hit in
-                        HStack {
-                            VStack(alignment: .leading, spacing: StrataSpacing.xxs) {
-                                HStack {
-                                    Text(hit.entity)
-                                        .strataKeyStyle()
-                                    Spacer()
-                                    Text(hit.primitive)
-                                        .strataBadgeStyle()
-                                    Text("#\(hit.rank)")
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
-                                    Text(String(format: "%.4f", hit.score))
-                                        .strataCodeStyle()
-                                        .foregroundStyle(.secondary)
-                                }
-                                if !hit.snippet.isEmpty {
-                                    Text(hit.snippet)
-                                        .strataSecondaryStyle()
-                                        .lineLimit(3)
-                                }
+                        VStack(alignment: .leading, spacing: StrataSpacing.xxs) {
+                            HStack {
+                                Text(hit.entity)
+                                    .strataKeyStyle()
+                                Spacer()
+                                Text(hit.primitive)
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, StrataSpacing.xs)
+                                    .padding(.vertical, 2)
+                                    .background(primitiveColor(hit.primitive), in: Capsule())
+                                Text("#\(hit.rank)")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+
+                            ScoreBar(
+                                score: hit.score,
+                                maxScore: model.results.first?.score ?? 1.0,
+                                compact: true
+                            )
+
+                            if !hit.snippet.isEmpty {
+                                Text(hit.snippet)
+                                    .strataSecondaryStyle()
+                                    .lineLimit(3)
                             }
                         }
                         .padding(StrataSpacing.sm)
@@ -179,6 +185,17 @@ struct SearchView: View {
                 }
             }
             .padding(StrataSpacing.lg)
+        }
+    }
+
+    private func primitiveColor(_ primitive: String) -> Color {
+        switch primitive.lowercased() {
+        case "kv": return .blue
+        case "state": return .purple
+        case "event": return .orange
+        case "json": return .green
+        case "vector": return .pink
+        default: return .gray
         }
     }
 }
