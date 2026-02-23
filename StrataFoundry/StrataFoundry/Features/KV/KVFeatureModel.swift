@@ -22,7 +22,14 @@ final class KVFeatureModel {
     var isLoading = false
     var errorMessage: String?
     var filterText = ""
-    var selectedEntry: KVEntryDisplay?
+    var selectedEntryId: KVEntryDisplay.ID?
+    var showInspector = false
+    var sortOrder: [KeyPathComparator<KVEntryDisplay>] = [.init(\.key, order: .forward)]
+
+    var selectedEntry: KVEntryDisplay? {
+        get { entries.first(where: { $0.id == selectedEntryId }) }
+        set { selectedEntryId = newValue?.id }
+    }
 
     // Form state
     var formKey = ""
@@ -40,8 +47,10 @@ final class KVFeatureModel {
     var isTimeTraveling: Bool { appState.timeTravelDate != nil }
 
     var filteredEntries: [KVEntryDisplay] {
-        if filterText.isEmpty { return entries }
-        return entries.filter { $0.key.localizedCaseInsensitiveContains(filterText) }
+        let filtered = filterText.isEmpty
+            ? entries
+            : entries.filter { $0.key.localizedCaseInsensitiveContains(filterText) }
+        return filtered.sorted(using: sortOrder)
     }
 
     init(kvService: KVService, appState: AppState) {

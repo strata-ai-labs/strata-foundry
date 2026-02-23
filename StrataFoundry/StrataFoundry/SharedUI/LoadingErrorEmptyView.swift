@@ -32,40 +32,33 @@ struct LoadingErrorEmptyView<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        if isLoading {
-            Spacer()
-            ProgressView("Loading...")
-            Spacer()
-        } else if let error = errorMessage {
-            Spacer()
-            VStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.title2)
-                    .foregroundStyle(.red)
-                Text(error)
-                    .foregroundStyle(.red)
-                    .font(.callout)
-                    .multilineTextAlignment(.center)
-            }
-            .padding()
-            Spacer()
-        } else if isEmpty {
-            Spacer()
-            VStack(spacing: 8) {
-                Image(systemName: emptyIcon)
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-                Text(emptyText)
-                    .foregroundStyle(.secondary)
-                if let sub = emptySubtext {
-                    Text(sub)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+        Group {
+            if isLoading {
+                SkeletonLoadingView()
+            } else if let error = errorMessage {
+                VStack(spacing: StrataSpacing.xs) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.title2)
+                        .foregroundStyle(.red)
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.callout)
+                        .multilineTextAlignment(.center)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding()
+            } else if isEmpty {
+                EmptyStateView(
+                    icon: emptyIcon,
+                    title: emptyText,
+                    subtitle: emptySubtext
+                )
+            } else {
+                content()
             }
-            Spacer()
-        } else {
-            content()
         }
+        .animation(.easeInOut(duration: 0.25), value: isLoading)
+        .animation(.easeInOut(duration: 0.25), value: errorMessage == nil)
+        .animation(.easeInOut(duration: 0.25), value: isEmpty)
     }
 }

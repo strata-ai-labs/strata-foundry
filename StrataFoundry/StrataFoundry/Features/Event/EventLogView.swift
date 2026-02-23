@@ -11,83 +11,97 @@ struct EventLogView: View {
     @Environment(AppState.self) private var appState
     @State private var model: EventFeatureModel?
 
-    var body: some View {
-        VStack(spacing: 0) {
-            if let model {
-                toolbar(model)
-                Divider()
-                content(model)
-            } else {
-                Spacer()
-                ProgressView("Loading...")
-                Spacer()
-            }
-        }
-        .task(id: appState.reloadToken) {
-            if model == nil, let services = appState.services {
-                model = EventFeatureModel(eventService: services.eventService, appState: appState)
-            }
-            await model?.loadEvents()
-        }
-        .sheet(isPresented: Binding(
-            get: { model?.showAppendSheet ?? false },
-            set: { model?.showAppendSheet = $0 }
-        ), onDismiss: { model?.clearForm() }) {
-            if let model {
-                appendFormSheet(model: model)
-            }
-        }
-        .sheet(isPresented: Binding(
-            get: { model?.showBatchSheet ?? false },
-            set: { model?.showBatchSheet = $0 }
-        )) {
-            if let model {
-                BatchImportSheet(
-                    title: "Batch Append Events (EventBatchAppend)",
-                    placeholder: "JSON array of {\"event_type\": \"...\", \"payload\": {...}} objects"
-                ) { jsonText in
-                    await model.batchImport(jsonText: jsonText)
-                } onDismiss: {
-                    model.showBatchSheet = false
-                }
-            }
+    private var filterBinding: Binding<String> {
+        Binding(
+            get: { model?.filterText ?? "" },
+            set: { model?.filterText = $0 }
+        )
+    }
+
+    @ViewBuilder
+    private var mainContent: some View {
+        if let model {
+            content(model)
+        } else {
+            SkeletonLoadingView()
         }
     }
 
-    // MARK: - Toolbar
-
-    @ViewBuilder
-    private func toolbar(_ model: EventFeatureModel) -> some View {
-        HStack {
-            Text("Event Log")
-                .font(.title2)
-                .fontWeight(.semibold)
-            Spacer()
-            Text("\(model.eventCount) events")
-                .foregroundStyle(.secondary)
+    @ToolbarContentBuilder
+    private var eventToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
             Button {
-                model.showAppendSheet = true
+                model?.showAppendSheet = true
             } label: {
-                Image(systemName: "plus")
+                Label("Append Event", systemImage: "plus")
             }
             .help("Append Event")
-            .disabled(model.isTimeTraveling)
+            .disabled(model?.isTimeTraveling ?? true)
+
             Button {
-                model.showBatchSheet = true
+                model?.showBatchSheet = true
             } label: {
-                Image(systemName: "square.and.arrow.down.on.square")
+                Label("Batch Append", systemImage: "square.and.arrow.down.on.square")
             }
             .help("Batch Append")
-            .disabled(model.isTimeTraveling)
+            .disabled(model?.isTimeTraveling ?? true)
+        }
+
+        ToolbarItem(placement: .automatic) {
             Button {
-                Task { await model.loadEvents() }
+                withAnimation { model?.showInspector.toggle() }
             } label: {
-                Image(systemName: "arrow.clockwise")
+                Label("Inspector", systemImage: "sidebar.trailing")
+            }
+            .help("Toggle Inspector (⌘⌃I)")
+            .keyboardShortcut("i", modifiers: [.command, .control])
+        }
+
+        ToolbarItem(placement: .automatic) {
+            Button {
+                Task { await model?.loadEvents() }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
             }
             .help("Refresh")
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
+    }
+
+    var body: some View {
+        mainContent
+            .navigationTitle("Event Log")
+            .navigationSubtitle(model.map { "\($0.eventCount) events" } ?? "")
+            .searchable(text: filterBinding, prompt: "Filter by event type...")
+            .toolbar { eventToolbar }
+            .task(id: appState.reloadToken) {
+                if model == nil, let services = appState.services {
+                    model = EventFeatureModel(eventService: services.eventService, appState: appState)
+                }
+                await model?.loadEvents()
+            }
+            .sheet(isPresented: Binding(
+                get: { model?.showAppendSheet ?? false },
+                set: { model?.showAppendSheet = $0 }
+            ), onDismiss: { model?.clearForm() }) {
+                if let model {
+                    appendFormSheet(model: model)
+                }
+            }
+            .sheet(isPresented: Binding(
+                get: { model?.showBatchSheet ?? false },
+                set: { model?.showBatchSheet = $0 }
+            )) {
+                if let model {
+                    BatchImportSheet(
+                        title: "Batch Append Events (EventBatchAppend)",
+                        placeholder: "JSON array of {\"event_type\": \"...\", \"payload\": {...}} objects"
+                    ) { jsonText in
+                        await model.batchImport(jsonText: jsonText)
+                    } onDismiss: {
+                        model.showBatchSheet = false
+                    }
+                }
+            }
     }
 
     // MARK: - Content
@@ -101,24 +115,92 @@ struct EventLogView: View {
             emptyIcon: "list.bullet.clipboard",
             emptyText: "No events in log"
         ) {
-            List(model.events) { event in
-                HStack(alignment: .top, spacing: 12) {
+            Table(
+                model.filteredEvents,
+                selection: Binding(
+                    get: { model.selectedEventId },
+                    set: { model.selectedEventId = $0 }
+                )
+            ) {
+                TableColumn("Seq") { event in
                     Text("#\(event.sequence)")
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.tertiary)
-                        .frame(width: 30, alignment: .trailing)
+                }
+                .width(40)
 
+                TableColumn("Type") { event in
                     Text(event.eventType)
-                        .font(.system(.body, design: .monospaced))
-                        .fontWeight(.medium)
-                        .frame(width: 100, alignment: .leading)
+                        .strataKeyStyle()
+                }
+                .width(min: 80, ideal: 120)
 
+                TableColumn("Summary") { event in
                     Text(event.summary)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .strataSecondaryStyle()
                         .lineLimit(2)
                 }
+                .width(min: 200, ideal: 400)
+
+                TableColumn("Timestamp") { event in
+                    Text(event.timestamp > 0 ? formatTimestampShort(event.timestamp) : "")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .width(min: 100, ideal: 140)
             }
+            .inspector(isPresented: Binding(
+                get: { model.showInspector },
+                set: { model.showInspector = $0 }
+            )) {
+                eventInspector(model)
+                    .inspectorColumnWidth(min: 280, ideal: 320, max: 400)
+            }
+        }
+    }
+
+    // MARK: - Inspector
+
+    @ViewBuilder
+    private func eventInspector(_ model: EventFeatureModel) -> some View {
+        if let event = model.selectedEvent {
+            ScrollView {
+                VStack(alignment: .leading, spacing: StrataSpacing.md) {
+                    Text("Event Details")
+                        .strataSectionHeader()
+
+                    LabeledContent("Sequence") {
+                        Text("#\(event.sequence)").strataKeyStyle()
+                    }
+                    LabeledContent("Type") {
+                        Text(event.eventType).strataBadgeStyle()
+                    }
+                    if event.timestamp > 0 {
+                        LabeledContent("Timestamp") {
+                            Text(formatTimestampShort(event.timestamp))
+                        }
+                    }
+
+                    Divider()
+
+                    Text("Summary")
+                        .strataSectionHeader()
+                    Text(event.summary)
+                        .strataCodeStyle()
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(StrataSpacing.xs)
+                        .background(.quaternary.opacity(0.5))
+                        .clipShape(RoundedRectangle(cornerRadius: StrataRadius.sm))
+                }
+                .padding(StrataSpacing.md)
+            }
+        } else {
+            EmptyStateView(
+                icon: "sidebar.trailing",
+                title: "No Selection",
+                subtitle: "Select an event to inspect"
+            )
         }
     }
 
@@ -126,7 +208,7 @@ struct EventLogView: View {
 
     @ViewBuilder
     private func appendFormSheet(model: EventFeatureModel) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: StrataSpacing.md) {
             Text("Append Event")
                 .font(.headline)
 
@@ -146,7 +228,10 @@ struct EventLogView: View {
             ))
             .font(.system(.body, design: .monospaced))
             .frame(minHeight: 100)
-            .border(Color.secondary.opacity(0.3))
+            .overlay(
+                RoundedRectangle(cornerRadius: StrataRadius.md)
+                    .stroke(.separator, lineWidth: 1)
+            )
 
             HStack {
                 Button("Cancel") {
@@ -163,7 +248,17 @@ struct EventLogView: View {
                 .disabled(model.formEventType.isEmpty)
             }
         }
-        .padding(20)
-        .frame(minWidth: 400)
+        .padding(StrataSpacing.lg)
+        .frame(minWidth: StrataLayout.sheetMinWidth)
+    }
+
+    // MARK: - Helpers
+
+    private func formatTimestampShort(_ micros: UInt64) -> String {
+        let date = Date(timeIntervalSince1970: Double(micros) / 1_000_000.0)
+        let fmt = DateFormatter()
+        fmt.dateStyle = .short
+        fmt.timeStyle = .medium
+        return fmt.string(from: date)
     }
 }

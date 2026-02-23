@@ -14,15 +14,43 @@ struct GraphView: View {
     @State private var model: GraphFeatureModel?
 
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
             if let model {
-                toolbar(model)
-                Divider()
                 content(model)
             } else {
-                Spacer()
-                ProgressView("Loading...")
-                Spacer()
+                SkeletonLoadingView()
+            }
+        }
+        .navigationTitle("Graph Explorer")
+        .navigationSubtitle(model.map { "\($0.graphs.count) graphs" } ?? "")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    model?.formGraphName = ""
+                    model?.formCascadePolicy = "none"
+                    model?.showCreateSheet = true
+                } label: {
+                    Label("Create Graph", systemImage: "plus")
+                }
+                .help("Create Graph")
+                .disabled(model?.isTimeTraveling ?? true)
+
+                Button {
+                    model?.showDeleteConfirm = true
+                } label: {
+                    Label("Delete Graph", systemImage: "trash")
+                }
+                .help("Delete Graph")
+                .disabled(model?.isTimeTraveling ?? true || model?.selectedGraph == nil)
+            }
+
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    Task { await model?.loadGraphs() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .help("Refresh")
             }
         }
         .task(id: appState.reloadToken) {
@@ -59,44 +87,6 @@ struct GraphView: View {
         }
     }
 
-    // MARK: - Toolbar
-
-    @ViewBuilder
-    private func toolbar(_ model: GraphFeatureModel) -> some View {
-        HStack {
-            Text("Graph Explorer")
-                .font(.title2)
-                .fontWeight(.semibold)
-            Spacer()
-            Text("\(model.graphs.count) graphs")
-                .foregroundStyle(.secondary)
-            Button {
-                model.formGraphName = ""
-                model.formCascadePolicy = "none"
-                model.showCreateSheet = true
-            } label: {
-                Image(systemName: "plus")
-            }
-            .help("Create Graph")
-            .disabled(model.isTimeTraveling)
-            Button {
-                model.showDeleteConfirm = true
-            } label: {
-                Image(systemName: "trash")
-            }
-            .help("Delete Graph")
-            .disabled(model.isTimeTraveling || model.selectedGraph == nil)
-            Button {
-                Task { await model.loadGraphs() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .help("Refresh")
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
-    }
-
     // MARK: - Content
 
     @ViewBuilder
@@ -109,18 +99,16 @@ struct GraphView: View {
             emptyText: "No graphs"
         ) {
             HSplitView {
-                // Left pane: graph list
                 List(model.graphs, id: \.self, selection: Binding(
                     get: { model.selectedGraph },
                     set: { model.selectedGraph = $0 }
                 )) { graph in
                     Text(graph)
-                        .font(.system(.body, design: .monospaced))
+                        .strataKeyStyle()
                         .tag(graph)
                 }
                 .frame(minWidth: 160, idealWidth: 200)
 
-                // Right pane: operations
                 rightPane(model)
             }
         }
@@ -130,7 +118,7 @@ struct GraphView: View {
 
     @ViewBuilder
     private func createGraphSheet(_ model: GraphFeatureModel) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: StrataSpacing.md) {
             Text("Create Graph")
                 .font(.headline)
 
@@ -164,8 +152,8 @@ struct GraphView: View {
                 .disabled(model.formGraphName.isEmpty)
             }
         }
-        .padding(20)
-        .frame(minWidth: 350)
+        .padding(StrataSpacing.lg)
+        .frame(minWidth: StrataLayout.sheetMinWidth)
     }
 
     // MARK: - Right Pane
@@ -174,9 +162,8 @@ struct GraphView: View {
     private func rightPane(_ model: GraphFeatureModel) -> some View {
         if let graphName = model.selectedGraph {
             VStack(spacing: 0) {
-                // Meta banner
                 if let meta = model.graphMeta {
-                    HStack(spacing: 8) {
+                    HStack(spacing: StrataSpacing.xs) {
                         StatsCapsule(label: "Graph", value: graphName)
                         StatsCapsule(label: "Nodes", value: "\(model.nodeList.count)")
                         if !meta.isEmpty {
@@ -184,12 +171,11 @@ struct GraphView: View {
                         }
                         Spacer()
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, StrataSpacing.md)
+                    .padding(.vertical, StrataSpacing.xs)
                     Divider()
                 }
 
-                // Mode picker
                 Picker("Mode", selection: Binding(
                     get: { model.graphMode },
                     set: { model.graphMode = $0 }
@@ -199,14 +185,13 @@ struct GraphView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, StrataSpacing.md)
+                .padding(.vertical, StrataSpacing.xs)
 
                 Divider()
 
-                // Mode content
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: StrataSpacing.sm) {
                         switch model.graphMode {
                         case .nodes:
                             nodesModeView(model)
@@ -220,18 +205,12 @@ struct GraphView: View {
                             bulkInsertModeView(model)
                         }
                     }
-                    .padding(16)
+                    .padding(StrataSpacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         } else {
-            VStack {
-                Spacer()
-                Text("Select a graph")
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity)
+            EmptyStateView(icon: "circle.hexagongrid", title: "Select a graph")
         }
     }
 
@@ -239,15 +218,14 @@ struct GraphView: View {
 
     @ViewBuilder
     private func nodesModeView(_ model: GraphFeatureModel) -> some View {
-        // Node list
         if !model.nodeList.isEmpty {
             GroupBox("Nodes (\(model.nodeList.count))") {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 4) {
+                    LazyVStack(alignment: .leading, spacing: StrataSpacing.xxs) {
                         ForEach(model.nodeList, id: \.self) { nodeId in
                             HStack {
                                 Text(nodeId)
-                                    .font(.system(.body, design: .monospaced))
+                                    .strataKeyStyle()
                                 Spacer()
                                 Button("Get") {
                                     model.nodeIdField = nodeId
@@ -266,7 +244,7 @@ struct GraphView: View {
                             .padding(.vertical, 2)
                         }
                     }
-                    .padding(8)
+                    .padding(StrataSpacing.xs)
                 }
                 .frame(maxHeight: 200)
             }
@@ -274,9 +252,8 @@ struct GraphView: View {
 
         Divider()
 
-        // Add Node
         Text("Add / Get Node")
-            .font(.headline)
+            .strataSectionHeader()
 
         HStack {
             TextField("Node ID", text: Binding(
@@ -305,7 +282,7 @@ struct GraphView: View {
         ))
         .font(.system(.body, design: .monospaced))
         .frame(minHeight: 60)
-        .border(Color.secondary.opacity(0.3))
+        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
         .disabled(model.isTimeTraveling)
 
         HStack {
@@ -325,15 +302,13 @@ struct GraphView: View {
         }
 
         if let error = model.nodeError {
-            Text(error)
-                .foregroundStyle(.red)
-                .font(.callout)
+            Text(error).foregroundStyle(.red).font(.callout)
         }
 
         if let result = model.nodeResult {
             GroupBox("Node Data") {
                 Text(result)
-                    .font(.system(.body, design: .monospaced))
+                    .strataCodeStyle()
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -351,7 +326,7 @@ struct GraphView: View {
         }
 
         Text("Add Edge")
-            .font(.headline)
+            .strataSectionHeader()
 
         HStack {
             TextField("Source Node", text: Binding(
@@ -391,7 +366,7 @@ struct GraphView: View {
         ))
         .font(.system(.body, design: .monospaced))
         .frame(minHeight: 60)
-        .border(Color.secondary.opacity(0.3))
+        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
         .disabled(model.isTimeTraveling)
 
         HStack {
@@ -407,14 +382,10 @@ struct GraphView: View {
         }
 
         if let success = model.edgeSuccess {
-            Text(success)
-                .foregroundStyle(.green)
-                .font(.callout)
+            Text(success).foregroundStyle(.green).font(.callout)
         }
         if let error = model.edgeError {
-            Text(error)
-                .foregroundStyle(.red)
-                .font(.callout)
+            Text(error).foregroundStyle(.red).font(.callout)
         }
     }
 
@@ -423,7 +394,7 @@ struct GraphView: View {
     @ViewBuilder
     private func neighborsModeView(_ model: GraphFeatureModel) -> some View {
         Text("Graph Neighbors")
-            .font(.headline)
+            .strataSectionHeader()
 
         TextField("Node ID", text: Binding(
             get: { model.neighborNodeId },
@@ -453,25 +424,19 @@ struct GraphView: View {
         .disabled(model.neighborNodeId.isEmpty)
 
         if let error = model.neighborError {
-            Text(error)
-                .foregroundStyle(.red)
-                .font(.callout)
+            Text(error).foregroundStyle(.red).font(.callout)
         }
 
         if !model.neighborResults.isEmpty {
             GroupBox("Neighbors (\(model.neighborResults.count))") {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: StrataSpacing.xxs) {
                     ForEach(model.neighborResults) { neighbor in
                         HStack {
                             Text(neighbor.nodeId)
-                                .font(.system(.body, design: .monospaced))
+                                .strataKeyStyle()
                             Spacer()
                             Text(neighbor.edgeType)
-                                .font(.caption)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(.quaternary)
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                .strataBadgeStyle()
                             if let w = neighbor.weight {
                                 Text(String(format: "%.3f", w))
                                     .font(.caption)
@@ -480,7 +445,7 @@ struct GraphView: View {
                         }
                     }
                 }
-                .padding(8)
+                .padding(StrataSpacing.xs)
             }
         }
     }
@@ -490,7 +455,7 @@ struct GraphView: View {
     @ViewBuilder
     private func bfsModeView(_ model: GraphFeatureModel) -> some View {
         Text("Breadth-First Search")
-            .font(.headline)
+            .strataSectionHeader()
 
         TextField("Start Node", text: Binding(
             get: { model.bfsStart },
@@ -542,19 +507,17 @@ struct GraphView: View {
         .disabled(model.bfsStart.isEmpty)
 
         if let error = model.bfsError {
-            Text(error)
-                .foregroundStyle(.red)
-                .font(.callout)
+            Text(error).foregroundStyle(.red).font(.callout)
         }
 
         if let result = model.bfsResult {
             GroupBox("BFS Result \u{2014} \(result.visited.count) nodes visited") {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: StrataSpacing.xs) {
                     Text("Visited Nodes")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(result.visited.joined(separator: ", "))
-                        .font(.system(.caption, design: .monospaced))
+                        .strataCodeStyle()
                         .textSelection(.enabled)
 
                     if !result.depths.isEmpty {
@@ -565,7 +528,7 @@ struct GraphView: View {
                         ForEach(result.depths.sorted(by: { $0.value < $1.value }), id: \.key) { node, depth in
                             HStack {
                                 Text(node)
-                                    .font(.system(.caption, design: .monospaced))
+                                    .strataCodeStyle()
                                 Spacer()
                                 Text("depth \(depth)")
                                     .font(.caption)
@@ -574,7 +537,7 @@ struct GraphView: View {
                         }
                     }
                 }
-                .padding(8)
+                .padding(StrataSpacing.xs)
             }
         }
     }
@@ -590,7 +553,7 @@ struct GraphView: View {
         }
 
         Text("Bulk Insert")
-            .font(.headline)
+            .strataSectionHeader()
 
         Text("Paste JSON with \"nodes\" and \"edges\" arrays:")
             .font(.caption)
@@ -602,7 +565,7 @@ struct GraphView: View {
         ))
         .font(.system(.body, design: .monospaced))
         .frame(minHeight: 200)
-        .border(Color.secondary.opacity(0.3))
+        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
         .disabled(model.isTimeTraveling)
 
         Text("Format: {\"nodes\": [{\"node_id\": \"...\", \"label\": \"...\", \"properties\": {...}}], \"edges\": [{\"src\": \"...\", \"dst\": \"...\", \"edge_type\": \"...\", \"weight\": 1.0}]}")
@@ -615,14 +578,10 @@ struct GraphView: View {
         .disabled(model.isTimeTraveling || model.bulkJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         if let result = model.bulkResult {
-            Text(result)
-                .foregroundStyle(.green)
-                .font(.callout)
+            Text(result).foregroundStyle(.green).font(.callout)
         }
         if let error = model.bulkError {
-            Text(error)
-                .foregroundStyle(.red)
-                .font(.callout)
+            Text(error).foregroundStyle(.red).font(.callout)
         }
     }
 }

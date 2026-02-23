@@ -33,66 +33,55 @@ struct VersionHistoryView: View {
                 Image(systemName: "clock.arrow.circlepath")
                     .foregroundStyle(.secondary)
                 Text("Version History")
-                    .font(.headline)
-                Text("—")
+                    .strataSectionHeader()
+                Text("\u{2014}")
                     .foregroundStyle(.tertiary)
                 Text(key)
-                    .font(.system(.body, design: .monospaced))
+                    .strataKeyStyle()
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(versions.count) versions")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
+                    .strataCountStyle()
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, StrataSpacing.md)
+            .padding(.vertical, StrataSpacing.sm)
 
             Divider()
 
             if isLoading {
-                Spacer()
-                ProgressView("Loading history...")
-                Spacer()
+                SkeletonLoadingView(rows: 5, columns: 2)
             } else if let error = errorMessage {
-                Spacer()
-                Text(error).foregroundStyle(.red).padding()
-                Spacer()
-            } else if versions.isEmpty {
-                Spacer()
-                VStack(spacing: 8) {
-                    Image(systemName: "clock")
-                        .font(.system(size: 40))
-                        .foregroundStyle(.secondary)
-                    Text("No version history available")
-                        .foregroundStyle(.secondary)
+                VStack {
+                    Spacer()
+                    Text(error).foregroundStyle(.red).padding()
+                    Spacer()
                 }
-                Spacer()
+            } else if versions.isEmpty {
+                EmptyStateView(
+                    icon: "clock",
+                    title: "No version history available"
+                )
             } else {
                 List(versions) { entry in
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: StrataSpacing.xs) {
                         HStack {
                             Text("v\(entry.version)")
-                                .font(.system(.body, design: .monospaced))
-                                .fontWeight(.semibold)
+                                .strataKeyStyle()
 
                             if entry.id == 0 {
                                 Text("latest")
                                     .font(.caption2)
-                                    .padding(.horizontal, 6)
+                                    .padding(.horizontal, StrataSpacing.xs)
                                     .padding(.vertical, 2)
                                     .background(.blue.opacity(0.15))
                                     .foregroundStyle(.blue)
-                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    .clipShape(RoundedRectangle(cornerRadius: StrataRadius.sm))
                             }
 
                             Spacer()
 
                             Text(entry.valueType)
-                                .font(.caption)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(.quaternary)
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                .strataBadgeStyle()
 
                             Text(formatTimestamp(entry.timestamp))
                                 .font(.caption)
@@ -100,13 +89,13 @@ struct VersionHistoryView: View {
                         }
 
                         Text(entry.displayValue)
-                            .font(.system(.caption, design: .monospaced))
+                            .strataCodeStyle()
                             .foregroundStyle(.secondary)
                             .lineLimit(expandedVersion == entry.id ? nil : 3)
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        withAnimation {
+                        withAnimation(.snappy) {
                             expandedVersion = expandedVersion == entry.id ? nil : entry.id
                         }
                     }

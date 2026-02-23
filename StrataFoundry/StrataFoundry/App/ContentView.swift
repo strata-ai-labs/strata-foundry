@@ -45,11 +45,11 @@ struct ContentView: View {
                 .environment(session.appState)
                 .id(session.id) // Force re-render when switching tabs
             } else {
-                // Should never be reached — WorkspaceState always has >= 1 session
                 Color.clear
             }
         }
         .frame(minWidth: 700, minHeight: 500)
+        .animation(.easeInOut(duration: 0.15), value: workspace.activeSessionId)
         .onChange(of: workspace.showOpenPanel) { _, show in
             if show {
                 openDatabasePanel()
@@ -62,7 +62,6 @@ struct ContentView: View {
                 workspace.showCreatePanel = false
             }
         }
-        // Bridge per-session open/create triggers from WelcomeView
         .onChange(of: workspace.activeSession?.appState.showOpenPanel ?? false) { _, show in
             if show {
                 workspace.activeSession?.appState.showOpenPanel = false
@@ -107,22 +106,21 @@ struct ContentView: View {
                     tabButton(for: session)
                 }
 
-                // New tab button
                 Button {
                     workspace.addTab()
                 } label: {
                     Image(systemName: "plus")
                         .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, StrataSpacing.xs)
+                        .padding(.vertical, StrataSpacing.xs)
                 }
                 .buttonStyle(.borderless)
                 .help("New Tab")
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, StrataSpacing.xxs)
         }
-        .frame(height: 32)
-        .background(.bar)
+        .frame(height: 36)
+        .background(.ultraThinMaterial)
 
         Divider()
     }
@@ -131,7 +129,7 @@ struct ContentView: View {
     private func tabButton(for session: DatabaseSession) -> some View {
         let isActive = session.id == workspace.activeSessionId
 
-        HStack(spacing: 4) {
+        HStack(spacing: StrataSpacing.xxs) {
             if session.isOpen {
                 Image(systemName: "cylinder.split.1x2")
                     .font(.caption2)
@@ -153,17 +151,31 @@ struct ContentView: View {
                 .help("Close Tab")
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, StrataSpacing.sm)
+        .padding(.vertical, StrataSpacing.xs)
         .background(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .clipShape(RoundedRectangle(cornerRadius: StrataRadius.md))
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: StrataRadius.md)
                 .stroke(isActive ? Color.accentColor.opacity(0.3) : Color.clear, lineWidth: 1)
         )
         .contentShape(Rectangle())
         .onTapGesture {
             workspace.activeSessionId = session.id
+        }
+        .contextMenu {
+            Button("Close Tab") {
+                workspace.closeTab(session.id)
+            }
+            .disabled(workspace.sessions.count <= 1)
+
+            Button("Close Other Tabs") {
+                let otherIds = workspace.sessions.filter { $0.id != session.id }.map(\.id)
+                for id in otherIds {
+                    workspace.closeTab(id)
+                }
+            }
+            .disabled(workspace.sessions.count <= 1)
         }
     }
 
@@ -171,7 +183,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var openOptionsSheet: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: StrataSpacing.md) {
             Text(pendingIsCreate ? "Configure New Database" : "Open Database Options")
                 .font(.headline)
 
@@ -216,14 +228,14 @@ struct ContentView: View {
 
             // Model Configuration
             GroupBox("Model Configuration (optional)") {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: StrataSpacing.xs) {
                     TextField("Model Endpoint (e.g. http://localhost:11434/v1)", text: $configModelEndpoint)
                         .textFieldStyle(.roundedBorder)
                     TextField("Model Name (e.g. qwen3:1.7b)", text: $configModelName)
                         .textFieldStyle(.roundedBorder)
                     TextField("API Key (optional)", text: $configModelApiKey)
                         .textFieldStyle(.roundedBorder)
-                    HStack(spacing: 16) {
+                    HStack(spacing: StrataSpacing.md) {
                         HStack {
                             Text("Timeout (ms)")
                                 .font(.caption)
@@ -266,7 +278,7 @@ struct ContentView: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
+        .padding(StrataSpacing.lg)
         .frame(minWidth: 480, idealWidth: 500)
     }
 

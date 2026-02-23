@@ -12,15 +12,44 @@ struct VectorStoreView: View {
     @State private var model: VectorFeatureModel?
 
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
             if let model {
-                toolbar(model)
-                Divider()
                 content(model)
             } else {
-                Spacer()
-                ProgressView("Loading...")
-                Spacer()
+                SkeletonLoadingView()
+            }
+        }
+        .navigationTitle("Vector Store")
+        .navigationSubtitle(model.map { "\($0.collections.count) collections" } ?? "")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    model?.formName = ""
+                    model?.formDimension = "384"
+                    model?.formMetric = "Cosine"
+                    model?.showCreateSheet = true
+                } label: {
+                    Label("Create Collection", systemImage: "plus")
+                }
+                .help("Create Collection")
+                .disabled(model?.isTimeTraveling ?? true)
+
+                Button {
+                    model?.showDeleteConfirm = true
+                } label: {
+                    Label("Drop Collection", systemImage: "trash")
+                }
+                .help("Drop Collection")
+                .disabled(model?.isTimeTraveling ?? true || model?.selectedCollection == nil)
+            }
+
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    Task { await model?.loadCollections() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .help("Refresh")
             }
         }
         .task(id: appState.reloadToken) {
@@ -67,45 +96,6 @@ struct VectorStoreView: View {
         }
     }
 
-    // MARK: - Toolbar
-
-    @ViewBuilder
-    private func toolbar(_ model: VectorFeatureModel) -> some View {
-        HStack {
-            Text("Vector Store")
-                .font(.title2)
-                .fontWeight(.semibold)
-            Spacer()
-            Text("\(model.collections.count) collections")
-                .foregroundStyle(.secondary)
-            Button {
-                model.formName = ""
-                model.formDimension = "384"
-                model.formMetric = "Cosine"
-                model.showCreateSheet = true
-            } label: {
-                Image(systemName: "plus")
-            }
-            .help("Create Collection")
-            .disabled(model.isTimeTraveling)
-            Button {
-                model.showDeleteConfirm = true
-            } label: {
-                Image(systemName: "trash")
-            }
-            .help("Drop Collection")
-            .disabled(model.isTimeTraveling || model.selectedCollection == nil)
-            Button {
-                Task { await model.loadCollections() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .help("Refresh")
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
-    }
-
     // MARK: - Content
 
     @ViewBuilder
@@ -137,14 +127,18 @@ struct VectorStoreView: View {
         )) { collection in
             VStack(alignment: .leading, spacing: 2) {
                 Text(collection.name)
-                    .font(.system(.body, design: .monospaced))
-                Text("dim=\(collection.dimension)  \(collection.metric.rawValue)  \(collection.count) vectors")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .strataKeyStyle()
+                HStack(spacing: StrataSpacing.xs) {
+                    Label("\(collection.dimension)", systemImage: "ruler")
+                    Label(collection.metric.rawValue, systemImage: "function")
+                    Label("\(collection.count)", systemImage: "number")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             .tag(collection.name)
         }
-        .frame(minWidth: 180, idealWidth: 220)
+        .frame(minWidth: 180, idealWidth: StrataLayout.sidebarIdealWidth)
     }
 
     // MARK: - Right Pane
@@ -153,13 +147,11 @@ struct VectorStoreView: View {
     private func rightPane(_ model: VectorFeatureModel) -> some View {
         if let collName = model.selectedCollection {
             VStack(spacing: 0) {
-                // Stats banner
                 if let stats = model.collectionStats {
                     statsBanner(stats)
                     Divider()
                 }
 
-                // Mode picker
                 Picker("Mode", selection: Binding(
                     get: { model.paneMode },
                     set: { model.paneMode = $0 }
@@ -169,14 +161,13 @@ struct VectorStoreView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, StrataSpacing.md)
+                .padding(.vertical, StrataSpacing.xs)
 
                 Divider()
 
-                // Mode content
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: StrataSpacing.sm) {
                         switch model.paneMode {
                         case .lookup:
                             lookupModeView(model, collection: collName)
@@ -188,18 +179,12 @@ struct VectorStoreView: View {
                             batchUpsertModeView(model)
                         }
                     }
-                    .padding(16)
+                    .padding(StrataSpacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         } else {
-            VStack {
-                Spacer()
-                Text("Select a collection")
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity)
+            EmptyStateView(icon: "square.3.layers.3d", title: "Select a collection")
         }
     }
 
@@ -207,7 +192,7 @@ struct VectorStoreView: View {
 
     @ViewBuilder
     private func statsBanner(_ stats: CollectionInfo) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: StrataSpacing.xs) {
             StatsCapsule(label: "Dim", value: "\(stats.dimension)")
             StatsCapsule(label: "Metric", value: stats.metric.rawValue)
             StatsCapsule(label: "Count", value: "\(stats.count)")
@@ -219,8 +204,8 @@ struct VectorStoreView: View {
             }
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, StrataSpacing.md)
+        .padding(.vertical, StrataSpacing.xs)
     }
 
     // MARK: - Lookup Mode
@@ -244,14 +229,12 @@ struct VectorStoreView: View {
         }
 
         if let error = model.lookupError {
-            Text(error)
-                .foregroundStyle(.secondary)
-                .font(.callout)
+            Text(error).strataSecondaryStyle()
         }
 
         if let result = model.lookupResult {
             GroupBox("Result") {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: StrataSpacing.xs) {
                     LabeledContent("Key", value: result.key)
                     LabeledContent("Version", value: "\(result.version)")
                     LabeledContent("Timestamp", value: "\(result.timestamp)")
@@ -266,7 +249,7 @@ struct VectorStoreView: View {
                         ? result.embedding
                         : Array(result.embedding.prefix(20))
                     Text("[\(displayEmbedding.map { String(format: "%.6f", $0) }.joined(separator: ", "))\(model.showFullEmbedding || result.embedding.count <= 20 ? "" : ", ...")]")
-                        .font(.system(.caption, design: .monospaced))
+                        .strataCodeStyle()
                         .textSelection(.enabled)
 
                     if result.embedding.count > 20 {
@@ -283,7 +266,7 @@ struct VectorStoreView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text(result.metadata)
-                            .font(.system(.caption, design: .monospaced))
+                            .strataCodeStyle()
                             .textSelection(.enabled)
                     }
                 }
@@ -318,7 +301,7 @@ struct VectorStoreView: View {
         ))
         .font(.system(.body, design: .monospaced))
         .frame(minHeight: 80)
-        .border(Color.secondary.opacity(0.3))
+        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
         .disabled(model.isTimeTraveling)
 
         if let stats = model.collectionStats, !model.upsertVector.isEmpty {
@@ -338,7 +321,7 @@ struct VectorStoreView: View {
         ))
         .font(.system(.body, design: .monospaced))
         .frame(minHeight: 60)
-        .border(Color.secondary.opacity(0.3))
+        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
         .disabled(model.isTimeTraveling)
 
         Button("Upsert") {
@@ -347,14 +330,10 @@ struct VectorStoreView: View {
         .disabled(model.isTimeTraveling || model.upsertKey.isEmpty || model.upsertVector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         if let success = model.upsertSuccess {
-            Text(success)
-                .foregroundStyle(.green)
-                .font(.callout)
+            Text(success).foregroundStyle(.green).font(.callout)
         }
         if let error = model.upsertError {
-            Text(error)
-                .foregroundStyle(.red)
-                .font(.callout)
+            Text(error).foregroundStyle(.red).font(.callout)
         }
     }
 
@@ -371,7 +350,7 @@ struct VectorStoreView: View {
         ))
         .font(.system(.body, design: .monospaced))
         .frame(minHeight: 80)
-        .border(Color.secondary.opacity(0.3))
+        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
 
         HStack {
             Text("k")
@@ -394,7 +373,7 @@ struct VectorStoreView: View {
         ))
         .font(.system(.body, design: .monospaced))
         .frame(minHeight: 60)
-        .border(Color.secondary.opacity(0.3))
+        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
 
         Button("Search") {
             Task { await model.vectorSearch() }
@@ -407,9 +386,7 @@ struct VectorStoreView: View {
         }
 
         if let error = model.searchError {
-            Text(error)
-                .foregroundStyle(.red)
-                .font(.callout)
+            Text(error).foregroundStyle(.red).font(.callout)
         }
 
         if !model.searchResults.isEmpty {
@@ -421,11 +398,10 @@ struct VectorStoreView: View {
                     )) { match in
                         HStack {
                             Text(match.key)
-                                .font(.system(.body, design: .monospaced))
+                                .strataKeyStyle()
                             Spacer()
                             Text(String(format: "%.4f", match.score))
-                                .foregroundStyle(.secondary)
-                                .font(.system(.body, design: .monospaced))
+                                .strataBadgeStyle()
                         }
                         .tag(match.key)
                     }
@@ -435,15 +411,15 @@ struct VectorStoreView: View {
                        let match = model.searchResults.first(where: { $0.key == matchKey }),
                        !match.metadataJSON.isEmpty && match.metadataJSON != "{}" {
                         Divider()
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: StrataSpacing.xxs) {
                             Text("Metadata for \"\(matchKey)\"")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Text(match.metadataJSON)
-                                .font(.system(.caption, design: .monospaced))
+                                .strataCodeStyle()
                                 .textSelection(.enabled)
                         }
-                        .padding(8)
+                        .padding(StrataSpacing.xs)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -474,7 +450,7 @@ struct VectorStoreView: View {
         ))
         .font(.system(.body, design: .monospaced))
         .frame(minHeight: 200)
-        .border(Color.secondary.opacity(0.3))
+        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
         .disabled(model.isTimeTraveling)
 
         Button("Batch Upsert") {
@@ -494,7 +470,7 @@ struct VectorStoreView: View {
 
     @ViewBuilder
     private func createCollectionSheet(_ model: VectorFeatureModel) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: StrataSpacing.md) {
             Text("Create Collection")
                 .font(.headline)
 
@@ -535,7 +511,7 @@ struct VectorStoreView: View {
                 .disabled(model.formName.isEmpty || Int(model.formDimension) == nil)
             }
         }
-        .padding(20)
-        .frame(minWidth: 350)
+        .padding(StrataSpacing.lg)
+        .frame(minWidth: StrataLayout.sheetMinWidth)
     }
 }

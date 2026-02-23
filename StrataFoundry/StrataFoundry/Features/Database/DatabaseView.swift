@@ -118,7 +118,7 @@ struct DatabaseView: View {
                     }
                 }
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
+            .navigationSplitViewColumnWidth(min: 180, ideal: StrataLayout.sidebarIdealWidth)
             .toolbar(removing: .sidebarToggle)
             .safeAreaInset(edge: .bottom) {
                 HStack {

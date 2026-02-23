@@ -15,50 +15,23 @@ struct ModelsView: View {
     @State private var model: ModelsFeatureModel?
 
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
             if let model {
-                // MARK: Header
-                HStack {
-                    Text("Models & Intelligence")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    Spacer()
-                    Text("\(model.registryModels.count) registry, \(model.localModels.count) local")
-                        .foregroundStyle(.secondary)
-                    Button {
-                        Task { await model.loadModels() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .help("Refresh")
-                }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-
-                Divider()
-
-                if model.isLoading {
-                    Spacer()
-                    ProgressView("Loading models...")
-                    Spacer()
-                } else if let error = model.errorMessage {
-                    Spacer()
-                    Text(error).foregroundStyle(.red).padding()
-                    Spacer()
-                } else {
-                    HSplitView {
-                        // Left pane: model list
-                        modelListPane(model)
-                            .frame(minWidth: 220, idealWidth: 280)
-
-                        // Right pane: operations
-                        rightPane(model)
-                    }
-                }
+                modelsContent(model)
             } else {
-                Spacer()
-                ProgressView("Loading...")
-                Spacer()
+                SkeletonLoadingView()
+            }
+        }
+        .navigationTitle("Models & Intelligence")
+        .navigationSubtitle(model.map { "\($0.registryModels.count) registry, \($0.localModels.count) local" } ?? "")
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    Task { await model?.loadModels() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .help("Refresh")
             }
         }
         .task(id: appState.reloadToken) {
@@ -66,6 +39,27 @@ struct ModelsView: View {
                 model = ModelsFeatureModel(modelService: services.modelService, searchService: services.searchService, appState: appState)
             }
             await model?.loadModels()
+        }
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private func modelsContent(_ model: ModelsFeatureModel) -> some View {
+        if model.isLoading {
+            SkeletonLoadingView()
+        } else if let error = model.errorMessage {
+            VStack {
+                Spacer()
+                Text(error).foregroundStyle(.red).padding()
+                Spacer()
+            }
+        } else {
+            HSplitView {
+                modelListPane(model)
+                    .frame(minWidth: 220, idealWidth: 280)
+                rightPane(model)
+            }
         }
     }
 
@@ -105,17 +99,16 @@ struct ModelsView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(entry.name)
-                    .font(.system(.body, design: .monospaced))
+                    .strataKeyStyle()
                 if entry.isLocal {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                         .font(.caption)
                 }
             }
-            HStack(spacing: 8) {
+            HStack(spacing: StrataSpacing.xs) {
                 Text(entry.task)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .strataBadgeStyle()
                 if !entry.architecture.isEmpty {
                     Text(entry.architecture)
                         .font(.caption2)
@@ -142,7 +135,6 @@ struct ModelsView: View {
     @ViewBuilder
     private func rightPane(_ model: ModelsFeatureModel) -> some View {
         VStack(spacing: 0) {
-            // Pull status
             if model.isPulling {
                 HStack {
                     ProgressView()
@@ -152,8 +144,8 @@ struct ModelsView: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
+                .padding(.horizontal, StrataSpacing.md)
+                .padding(.vertical, StrataSpacing.xs)
             }
             if let msg = model.pullMessage {
                 HStack {
@@ -162,11 +154,10 @@ struct ModelsView: View {
                         .foregroundStyle(.green)
                     Spacer()
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
+                .padding(.horizontal, StrataSpacing.md)
+                .padding(.vertical, StrataSpacing.xs)
             }
 
-            // Mode picker
             Picker("Mode", selection: Binding(
                 get: { model.modelsMode },
                 set: { model.modelsMode = $0 }
@@ -176,13 +167,13 @@ struct ModelsView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, StrataSpacing.md)
+            .padding(.vertical, StrataSpacing.xs)
 
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: StrataSpacing.sm) {
                     switch model.modelsMode {
                     case .embed:
                         embedModeView(model)
@@ -192,7 +183,7 @@ struct ModelsView: View {
                         statusModeView(model)
                     }
                 }
-                .padding(16)
+                .padding(StrataSpacing.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -203,7 +194,7 @@ struct ModelsView: View {
     @ViewBuilder
     private func embedModeView(_ model: ModelsFeatureModel) -> some View {
         Text("Single Embed")
-            .font(.headline)
+            .strataSectionHeader()
 
         TextField("Text to embed", text: Binding(
             get: { model.embedText },
@@ -223,7 +214,7 @@ struct ModelsView: View {
         if let result = model.embedResult {
             GroupBox("Embedding") {
                 Text(result)
-                    .font(.system(.caption, design: .monospaced))
+                    .strataCodeStyle()
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -232,7 +223,7 @@ struct ModelsView: View {
         Divider()
 
         Text("Batch Embed")
-            .font(.headline)
+            .strataSectionHeader()
 
         Text("One text per line")
             .font(.caption)
@@ -244,7 +235,7 @@ struct ModelsView: View {
         ))
             .font(.system(.body, design: .monospaced))
             .frame(minHeight: 100)
-            .border(Color.secondary.opacity(0.3))
+            .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
 
         Button("Embed Batch") {
             Task { await model.runEmbedBatch() }
@@ -257,7 +248,7 @@ struct ModelsView: View {
         if let result = model.embedBatchResult {
             GroupBox("Batch Embeddings") {
                 Text(result)
-                    .font(.system(.caption, design: .monospaced))
+                    .strataCodeStyle()
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -269,7 +260,7 @@ struct ModelsView: View {
     @ViewBuilder
     private func configureModeView(_ model: ModelsFeatureModel) -> some View {
         Text("Configure Model")
-            .font(.headline)
+            .strataSectionHeader()
 
         TextField("Endpoint URL", text: Binding(
             get: { model.configEndpoint },
@@ -313,7 +304,7 @@ struct ModelsView: View {
     @ViewBuilder
     private func statusModeView(_ model: ModelsFeatureModel) -> some View {
         Text("Embedding Status")
-            .font(.headline)
+            .strataSectionHeader()
 
         Button("Refresh Status") {
             Task { await model.loadEmbedStatus() }
@@ -325,7 +316,7 @@ struct ModelsView: View {
         if let status = model.embedStatus {
             GroupBox("Status") {
                 Text(status)
-                    .font(.system(.body, design: .monospaced))
+                    .strataCodeStyle()
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

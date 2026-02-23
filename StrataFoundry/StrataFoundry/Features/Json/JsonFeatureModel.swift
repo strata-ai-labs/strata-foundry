@@ -11,6 +11,12 @@ final class JsonFeatureModel {
     var isLoading = false
     var errorMessage: String?
     var showHistory = false
+    var filterText = ""
+
+    var filteredKeys: [String] {
+        if filterText.isEmpty { return keys }
+        return keys.filter { $0.localizedCaseInsensitiveContains(filterText) }
+    }
 
     // Write state
     var showAddSheet = false

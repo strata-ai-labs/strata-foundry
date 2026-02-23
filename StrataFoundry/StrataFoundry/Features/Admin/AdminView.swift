@@ -12,58 +12,22 @@ struct AdminView: View {
     @State private var model: AdminFeatureModel?
 
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
             if let model {
-                // MARK: Header
-                HStack {
-                    Text("Admin")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    Spacer()
-                    Button {
-                        Task { await model.loadAll() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .help("Refresh")
-                }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-
-                Divider()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        // MARK: Connectivity
-                        connectivitySection(model)
-
-                        Divider()
-
-                        // MARK: Configuration Section
-                        configurationSection(model)
-
-                        Divider()
-
-                        // MARK: Retention Section
-                        retentionSection(model)
-
-                        Divider()
-
-                        // MARK: Maintenance Section
-                        maintenanceSection(model)
-
-                        Divider()
-
-                        // MARK: Transactions (placeholder)
-                        transactionsSection
-                    }
-                    .padding(24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                adminContent(model)
             } else {
-                Spacer()
-                ProgressView("Loading...")
-                Spacer()
+                SkeletonLoadingView()
+            }
+        }
+        .navigationTitle("Admin")
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    Task { await model?.loadAll() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .help("Refresh")
             }
         }
         .task(id: appState.reloadToken) {
@@ -74,24 +38,60 @@ struct AdminView: View {
         }
     }
 
+    // MARK: - Content
+
+    @ViewBuilder
+    private func adminContent(_ model: AdminFeatureModel) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: StrataSpacing.lg) {
+                connectivitySection(model)
+                Divider()
+                configurationSection(model)
+                Divider()
+                retentionSection(model)
+                Divider()
+                maintenanceSection(model)
+                Divider()
+                transactionsSection
+            }
+            .padding(StrataSpacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     // MARK: - Connectivity
 
     @ViewBuilder
     private func connectivitySection(_ model: AdminFeatureModel) -> some View {
         HStack {
             Text("Connectivity")
-                .font(.headline)
+                .strataSectionHeader()
             Spacer()
+
+            if let result = model.pingResult {
+                HStack(spacing: StrataSpacing.xxs) {
+                    Circle()
+                        .fill(.green)
+                        .frame(width: 8, height: 8)
+                    Text(result)
+                        .font(.callout)
+                        .foregroundStyle(.green)
+                }
+            }
+            if let error = model.pingError {
+                HStack(spacing: StrataSpacing.xxs) {
+                    Circle()
+                        .fill(.red)
+                        .frame(width: 8, height: 8)
+                    Text(error)
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                }
+            }
+
             Button("Ping") {
                 Task { await model.runPing() }
             }
-        }
-
-        if let result = model.pingResult {
-            Text(result).foregroundStyle(.green).font(.callout)
-        }
-        if let error = model.pingError {
-            Text(error).foregroundStyle(.red).font(.callout)
         }
     }
 
@@ -101,7 +101,7 @@ struct AdminView: View {
     private func configurationSection(_ model: AdminFeatureModel) -> some View {
         HStack {
             Text("Configuration")
-                .font(.headline)
+                .strataSectionHeader()
             Spacer()
             Button("Load Config") {
                 Task { await model.loadConfig() }
@@ -115,20 +115,25 @@ struct AdminView: View {
         if let json = model.configJSON {
             GroupBox {
                 Text(json)
-                    .font(.system(.caption, design: .monospaced))
+                    .strataCodeStyle()
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
 
-        HStack(spacing: 16) {
+        HStack(spacing: StrataSpacing.md) {
             Text("Auto-Embed:")
                 .font(.callout)
             if let enabled = model.autoEmbedEnabled {
-                Text(enabled ? "Enabled" : "Disabled")
-                    .font(.callout)
-                    .fontWeight(.medium)
-                    .foregroundStyle(enabled ? .green : .secondary)
+                HStack(spacing: StrataSpacing.xxs) {
+                    Circle()
+                        .fill(enabled ? .green : .secondary)
+                        .frame(width: 8, height: 8)
+                    Text(enabled ? "Enabled" : "Disabled")
+                        .font(.callout)
+                        .fontWeight(.medium)
+                        .foregroundStyle(enabled ? .green : .secondary)
+                }
 
                 Button(enabled ? "Disable" : "Enable") {
                     Task { await model.setAutoEmbed(!enabled) }
@@ -155,11 +160,11 @@ struct AdminView: View {
     private func retentionSection(_ model: AdminFeatureModel) -> some View {
         HStack {
             Text("Retention / GC")
-                .font(.headline)
+                .strataSectionHeader()
             Spacer()
         }
 
-        HStack(spacing: 12) {
+        HStack(spacing: StrataSpacing.sm) {
             Button("Run GC (RetentionApply)") {
                 Task { await model.runRetention() }
             }
@@ -181,7 +186,7 @@ struct AdminView: View {
         if let stats = model.retentionStats {
             GroupBox("Retention Stats") {
                 Text(stats)
-                    .font(.system(.caption, design: .monospaced))
+                    .strataCodeStyle()
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -190,7 +195,7 @@ struct AdminView: View {
         if let preview = model.retentionPreview {
             GroupBox("Retention Preview") {
                 Text(preview)
-                    .font(.system(.caption, design: .monospaced))
+                    .strataCodeStyle()
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -203,11 +208,11 @@ struct AdminView: View {
     private func maintenanceSection(_ model: AdminFeatureModel) -> some View {
         HStack {
             Text("Maintenance")
-                .font(.headline)
+                .strataSectionHeader()
             Spacer()
         }
 
-        HStack(spacing: 12) {
+        HStack(spacing: StrataSpacing.sm) {
             Button("Flush") {
                 Task { await model.runFlush() }
             }
@@ -234,7 +239,7 @@ struct AdminView: View {
         if let counters = model.durabilityCounters {
             GroupBox("WAL / Durability Counters") {
                 Text(counters)
-                    .font(.system(.caption, design: .monospaced))
+                    .strataCodeStyle()
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -250,21 +255,20 @@ struct AdminView: View {
     private var transactionsSection: some View {
         HStack {
             Text("Transactions")
-                .font(.headline)
+                .strataSectionHeader()
             Spacer()
             Text("Coming soon")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.horizontal, StrataSpacing.xs)
+                .padding(.vertical, StrataSpacing.xxs)
                 .background(.quaternary, in: Capsule())
         }
 
         Text("Transaction commands (Begin, Commit, Rollback, Info, IsActive) are not yet implemented in the executor.")
-            .font(.callout)
-            .foregroundStyle(.secondary)
+            .strataSecondaryStyle()
 
-        HStack(spacing: 12) {
+        HStack(spacing: StrataSpacing.sm) {
             Button("Begin") {}
                 .disabled(true)
             Button("Commit") {}

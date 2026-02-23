@@ -17,7 +17,14 @@ final class StateFeatureModel {
     var cells: [StateCellDisplay] = []
     var isLoading = false
     var errorMessage: String?
-    var selectedCell: StateCellDisplay?
+    var selectedCellId: StateCellDisplay.ID?
+    var showInspector = false
+    var sortOrder: [KeyPathComparator<StateCellDisplay>] = [.init(\.name, order: .forward)]
+
+    var selectedCell: StateCellDisplay? {
+        get { cells.first(where: { $0.id == selectedCellId }) }
+        set { selectedCellId = newValue?.id }
+    }
 
     // Form
     var formCell = ""
@@ -33,6 +40,10 @@ final class StateFeatureModel {
     var showBatchSheet = false
 
     var isTimeTraveling: Bool { appState.timeTravelDate != nil }
+
+    var sortedCells: [StateCellDisplay] {
+        cells.sorted(using: sortOrder)
+    }
 
     init(stateService: StateService, appState: AppState) {
         self.stateService = stateService

@@ -22,60 +22,36 @@ struct BranchesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Branches")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                Spacer()
-                Text("\(branches.count) branches")
-                    .foregroundStyle(.secondary)
-                Button {
-                    Task { await loadBranches() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .help("Refresh")
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
-
-            Divider()
-
             if isLoading {
-                Spacer()
-                ProgressView("Loading branches...")
-                Spacer()
+                SkeletonLoadingView(rows: 4, columns: 3)
             } else if let error = errorMessage {
-                Spacer()
-                Text(error).foregroundStyle(.red)
-                Spacer()
-            } else if branches.isEmpty {
-                Spacer()
-                VStack(spacing: 8) {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 40))
-                        .foregroundStyle(.secondary)
-                    Text("No branches")
-                        .foregroundStyle(.secondary)
+                VStack {
+                    Spacer()
+                    Text(error).foregroundStyle(.red)
+                    Spacer()
                 }
-                Spacer()
+            } else if branches.isEmpty {
+                EmptyStateView(
+                    icon: "arrow.triangle.branch",
+                    title: "No branches"
+                )
             } else {
                 List(branches) { branch in
-                    HStack(spacing: 12) {
+                    HStack(spacing: StrataSpacing.sm) {
                         Image(systemName: branch.name == "default" ? "star.fill" : "arrow.triangle.branch")
                             .foregroundStyle(branch.name == "default" ? .yellow : .secondary)
                             .frame(width: 20)
                         Text(branch.name)
-                            .font(.system(.body, design: .monospaced))
+                            .strataKeyStyle()
                             .fontWeight(branch.name == "default" ? .semibold : .regular)
                         Spacer()
                         Text(branch.status)
                             .font(.caption)
-                            .padding(.horizontal, 6)
+                            .padding(.horizontal, StrataSpacing.xs)
                             .padding(.vertical, 2)
                             .background(.green.opacity(0.15))
                             .foregroundStyle(.green)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .clipShape(RoundedRectangle(cornerRadius: StrataRadius.sm))
                         if let parent = branch.parentId {
                             Text("from \(parent)")
                                 .font(.caption)
@@ -83,6 +59,18 @@ struct BranchesView: View {
                         }
                     }
                 }
+            }
+        }
+        .navigationTitle("Branches")
+        .navigationSubtitle("\(branches.count) branches")
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    Task { await loadBranches() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .help("Refresh")
             }
         }
         .task {

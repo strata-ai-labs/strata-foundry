@@ -17,6 +17,21 @@ final class EventFeatureModel {
     var isLoading = false
     var errorMessage: String?
     var eventCount: Int = 0
+    var selectedEventId: EventEntryDisplay.ID?
+    var showInspector = false
+    var filterText = ""
+
+    var selectedEvent: EventEntryDisplay? {
+        events.first(where: { $0.id == selectedEventId })
+    }
+
+    var filteredEvents: [EventEntryDisplay] {
+        if filterText.isEmpty { return events }
+        return events.filter {
+            $0.eventType.localizedCaseInsensitiveContains(filterText) ||
+            $0.summary.localizedCaseInsensitiveContains(filterText)
+        }
+    }
 
     // Append form
     var formEventType = ""

@@ -11,19 +11,70 @@ struct JsonStoreView: View {
     @Environment(AppState.self) private var appState
     @State private var model: JsonFeatureModel?
 
-    var body: some View {
-        VStack(spacing: 0) {
-            if let model {
-                toolbar(model)
-                Divider()
-                content(model)
-            } else {
-                Spacer()
-                ProgressView("Loading...")
-                Spacer()
-            }
+    private var filterBinding: Binding<String> {
+        Binding(
+            get: { model?.filterText ?? "" },
+            set: { model?.filterText = $0 }
+        )
+    }
+
+    @ViewBuilder
+    private var mainContent: some View {
+        if let model {
+            content(model)
+        } else {
+            SkeletonLoadingView()
         }
-        .task(id: appState.reloadToken) {
+    }
+
+    @ToolbarContentBuilder
+    private var jsonToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                model?.prepareAddForm()
+                model?.showAddSheet = true
+            } label: {
+                Label("Add Document", systemImage: "plus")
+            }
+            .help("Add Document")
+            .disabled(model?.isTimeTraveling ?? true)
+
+            Button {
+                model?.showBatchSheet = true
+            } label: {
+                Label("Batch Import", systemImage: "square.and.arrow.down.on.square")
+            }
+            .help("Batch Import")
+            .disabled(model?.isTimeTraveling ?? true)
+        }
+
+        ToolbarItem(placement: .automatic) {
+            Button {
+                model?.showDeleteConfirm = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .help("Delete Document")
+            .disabled(model?.isTimeTraveling ?? true || model?.selectedKey == nil)
+        }
+
+        ToolbarItem(placement: .automatic) {
+            Button {
+                Task { await model?.loadKeys() }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .help("Refresh")
+        }
+    }
+
+    var body: some View {
+        mainContent
+            .navigationTitle("JSON Store")
+            .navigationSubtitle(model.map { "\($0.keys.count) documents" } ?? "")
+            .searchable(text: filterBinding, prompt: "Filter documents...")
+            .toolbar { jsonToolbar }
+            .task(id: appState.reloadToken) {
             if model == nil, let services = appState.services {
                 model = JsonFeatureModel(jsonService: services.jsonService, appState: appState)
             }
@@ -80,50 +131,6 @@ struct JsonStoreView: View {
         }
     }
 
-    // MARK: - Toolbar
-
-    @ViewBuilder
-    private func toolbar(_ model: JsonFeatureModel) -> some View {
-        HStack {
-            Text("JSON Store")
-                .font(.title2)
-                .fontWeight(.semibold)
-            Spacer()
-            Text("\(model.keys.count) documents")
-                .foregroundStyle(.secondary)
-            Button {
-                model.prepareAddForm()
-                model.showAddSheet = true
-            } label: {
-                Image(systemName: "plus")
-            }
-            .help("Add Document")
-            .disabled(model.isTimeTraveling)
-            Button {
-                model.showBatchSheet = true
-            } label: {
-                Image(systemName: "square.and.arrow.down.on.square")
-            }
-            .help("Batch Import")
-            .disabled(model.isTimeTraveling)
-            Button {
-                model.showDeleteConfirm = true
-            } label: {
-                Image(systemName: "trash")
-            }
-            .help("Delete Document")
-            .disabled(model.isTimeTraveling || model.selectedKey == nil)
-            Button {
-                Task { await model.loadKeys() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .help("Refresh")
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
-    }
-
     // MARK: - Content
 
     @ViewBuilder
@@ -136,12 +143,12 @@ struct JsonStoreView: View {
             emptyText: "No JSON documents"
         ) {
             HSplitView {
-                List(model.keys, id: \.self, selection: Binding(
+                List(model.filteredKeys, id: \.self, selection: Binding(
                     get: { model.selectedKey },
                     set: { model.selectedKey = $0 }
                 )) { key in
                     Text(key)
-                        .font(.system(.body, design: .monospaced))
+                        .strataKeyStyle()
                 }
                 .frame(minWidth: 150, idealWidth: 200)
 
@@ -164,7 +171,7 @@ struct JsonStoreView: View {
                                       systemImage: model.showHistory ? "doc.text" : "clock.arrow.circlepath")
                             }
                             .buttonStyle(.borderless)
-                            .padding(8)
+                            .padding(StrataSpacing.xs)
                         }
                         Divider()
                     }
@@ -174,15 +181,17 @@ struct JsonStoreView: View {
                     } else {
                         ScrollView {
                             if model.documentJSON.isEmpty {
-                                Text("Select a document")
-                                    .foregroundStyle(.secondary)
-                                    .padding()
+                                EmptyStateView(
+                                    icon: "doc.text",
+                                    title: "Select a document"
+                                )
                             } else {
                                 Text(model.documentJSON)
                                     .font(.system(.body, design: .monospaced))
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding()
                                     .textSelection(.enabled)
+                                    .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
                             }
                         }
                     }
@@ -195,7 +204,7 @@ struct JsonStoreView: View {
 
     @ViewBuilder
     private func jsonFormSheet(model: JsonFeatureModel, isEditing: Bool) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: StrataSpacing.md) {
             Text(isEditing ? "Edit Document" : "Add Document")
                 .font(.headline)
 
@@ -216,7 +225,10 @@ struct JsonStoreView: View {
             ))
             .font(.system(.body, design: .monospaced))
             .frame(minHeight: 200)
-            .border(Color.secondary.opacity(0.3))
+            .overlay(
+                RoundedRectangle(cornerRadius: StrataRadius.md)
+                    .stroke(.separator, lineWidth: 1)
+            )
 
             HStack {
                 Button("Cancel") {
@@ -234,7 +246,7 @@ struct JsonStoreView: View {
                 .disabled(model.formKey.isEmpty || model.formJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(20)
+        .padding(StrataSpacing.lg)
         .frame(minWidth: 450, minHeight: 350)
     }
 }

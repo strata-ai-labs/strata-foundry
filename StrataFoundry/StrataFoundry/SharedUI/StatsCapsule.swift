@@ -15,7 +15,7 @@ struct StatsCapsule: View {
     var icon: String? = nil
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: StrataSpacing.xxs) {
             if let icon {
                 Image(systemName: icon)
                     .font(.caption2)
@@ -30,8 +30,8 @@ struct StatsCapsule: View {
                     .fontWeight(.medium)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, StrataSpacing.xs)
+        .padding(.vertical, StrataSpacing.xxs)
         .background(.quaternary)
         .clipShape(Capsule())
     }
@@ -42,7 +42,7 @@ struct StatsBanner: View {
     let stats: [(label: String, value: String, icon: String?)]
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: StrataSpacing.xs) {
             ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
                 StatsCapsule(label: stat.label, value: stat.value, icon: stat.icon)
             }

@@ -31,7 +31,7 @@ struct BatchImportSheet: View {
     @State private var isImporting = false
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: StrataSpacing.md) {
             Text(title)
                 .font(.headline)
 
@@ -39,15 +39,15 @@ struct BatchImportSheet: View {
                 .font(.system(.body, design: .monospaced))
                 .frame(minHeight: 200)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: StrataRadius.md)
+                        .stroke(.separator, lineWidth: 1)
                 )
                 .overlay(alignment: .topLeading) {
                     if jsonText.isEmpty {
                         Text(placeholder)
                             .foregroundStyle(.tertiary)
                             .font(.system(.body, design: .monospaced))
-                            .padding(8)
+                            .padding(StrataSpacing.xs)
                             .allowsHitTesting(false)
                     }
                 }
@@ -91,7 +91,7 @@ struct BatchImportSheet: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
-        .frame(minWidth: 500, minHeight: 350)
+        .padding(StrataSpacing.lg)
+        .frame(minWidth: StrataLayout.sheetMinWidth + 60, minHeight: 350)
     }
 }

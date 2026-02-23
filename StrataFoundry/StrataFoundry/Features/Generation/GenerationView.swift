@@ -15,62 +15,60 @@ struct GenerationView: View {
     @State private var model: GenerationFeatureModel?
 
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
             if let model {
-                // MARK: Header
-                HStack {
-                    Text("Generation")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    Spacer()
-                }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-
-                Divider()
-
-                // Mode picker
-                Picker("Mode", selection: Binding(
-                    get: { model.generationMode },
-                    set: { model.generationMode = $0 }
-                )) {
-                    ForEach(GenerationPaneMode.allCases, id: \.self) { m in
-                        Text(m.rawValue).tag(m)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 8)
-
-                Divider()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        switch model.generationMode {
-                        case .generate:
-                            generateModeView(model)
-                        case .tokenize:
-                            tokenizeModeView(model)
-                        case .detokenize:
-                            detokenizeModeView(model)
-                        case .unload:
-                            unloadModeView(model)
-                        }
-                    }
-                    .padding(24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                generationContent(model)
             } else {
-                Spacer()
-                ProgressView("Loading...")
-                Spacer()
+                SkeletonLoadingView()
             }
+        }
+        .navigationTitle("Generation")
+        .toolbar {
+            // Intentionally empty — generation doesn't need toolbar actions
         }
         .task(id: appState.reloadToken) {
             if model == nil, let services = appState.services {
                 model = GenerationFeatureModel(generationService: services.generationService, appState: appState)
             }
             model?.resetState()
+        }
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private func generationContent(_ model: GenerationFeatureModel) -> some View {
+        VStack(spacing: 0) {
+            Picker("Mode", selection: Binding(
+                get: { model.generationMode },
+                set: { model.generationMode = $0 }
+            )) {
+                ForEach(GenerationPaneMode.allCases, id: \.self) { m in
+                    Text(m.rawValue).tag(m)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, StrataSpacing.lg)
+            .padding(.vertical, StrataSpacing.xs)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                    switch model.generationMode {
+                    case .generate:
+                        generateModeView(model)
+                    case .tokenize:
+                        tokenizeModeView(model)
+                    case .detokenize:
+                        detokenizeModeView(model)
+                    case .unload:
+                        unloadModeView(model)
+                    }
+                }
+                .padding(StrataSpacing.lg)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
@@ -93,10 +91,10 @@ struct GenerationView: View {
         ))
         .font(.system(.body, design: .monospaced))
         .frame(minHeight: 120)
-        .border(Color.secondary.opacity(0.3))
+        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
 
         // Sampling params
-        HStack(spacing: 16) {
+        HStack(spacing: StrataSpacing.md) {
             HStack {
                 Text("Max Tokens")
                     .font(.caption)
@@ -174,7 +172,7 @@ struct GenerationView: View {
         if let result = model.genResult {
             GroupBox("Generated Text") {
                 Text(result)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.body)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -205,7 +203,7 @@ struct GenerationView: View {
         ))
         .font(.system(.body, design: .monospaced))
         .frame(minHeight: 80)
-        .border(Color.secondary.opacity(0.3))
+        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
 
         Button("Tokenize") {
             Task { await model.runTokenize() }
@@ -219,7 +217,7 @@ struct GenerationView: View {
         if let result = model.tokResult {
             GroupBox("Token IDs") {
                 Text(result)
-                    .font(.system(.caption, design: .monospaced))
+                    .strataCodeStyle()
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -245,7 +243,7 @@ struct GenerationView: View {
         ))
         .font(.system(.body, design: .monospaced))
         .frame(minHeight: 80)
-        .border(Color.secondary.opacity(0.3))
+        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
 
         Button("Detokenize") {
             Task { await model.runDetokenize() }
@@ -259,7 +257,7 @@ struct GenerationView: View {
         if let result = model.detokResult {
             GroupBox("Decoded Text") {
                 Text(result)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.body)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -271,8 +269,7 @@ struct GenerationView: View {
     @ViewBuilder
     private func unloadModeView(_ model: GenerationFeatureModel) -> some View {
         Text("Unload a loaded generation model from memory.")
-            .font(.callout)
-            .foregroundStyle(.secondary)
+            .strataSecondaryStyle()
 
         TextField("Model name", text: Binding(
             get: { model.unloadModel },
