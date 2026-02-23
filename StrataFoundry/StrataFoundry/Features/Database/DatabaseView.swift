@@ -9,12 +9,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum Primitive: String, CaseIterable, Identifiable, Hashable {
-    case kv = "KV Store"
-    case state = "State Cells"
-    case events = "Event Log"
-    case json = "JSON Store"
-    case vectors = "Vector Store"
-    case graph = "Graph"
+    case kv = "Key-Value"
+    case state = "State"
+    case events = "Events"
+    case json = "JSON"
+    case vectors = "Vectors"
 
     var id: String { rawValue }
 
@@ -25,7 +24,6 @@ enum Primitive: String, CaseIterable, Identifiable, Hashable {
         case .events: return "list.bullet.clipboard"
         case .json: return "doc.text"
         case .vectors: return "arrow.trianglehead.branch"
-        case .graph: return "circle.hexagongrid"
         }
     }
 
@@ -36,7 +34,6 @@ enum Primitive: String, CaseIterable, Identifiable, Hashable {
         case .events: return .orange
         case .json: return .green
         case .vectors: return .pink
-        case .graph: return .teal
         }
     }
 }
@@ -71,6 +68,7 @@ enum TopLevelItem: String, CaseIterable, Identifiable, Hashable {
 enum SidebarSelection: Hashable {
     case info
     case primitive(space: String, primitive: Primitive)
+    case graph
     case topLevel(TopLevelItem)
 }
 
@@ -100,6 +98,10 @@ struct DatabaseView: View {
     @State private var forkDestination = ""
     @State private var forkError: String?
 
+    // Sidebar expansion
+    @State private var expandedSpaces: Set<String> = []
+    @State private var isToolsExpanded = true
+
     // Branch Diff
     @State private var showDiffSheet = false
     @State private var diffBranchA = ""
@@ -128,7 +130,7 @@ struct DatabaseView: View {
                 .tag(SidebarSelection.info)
 
                 ForEach(appState.spaces, id: \.self) { space in
-                    Section {
+                    DisclosureGroup(isExpanded: spaceBinding(space)) {
                         ForEach(Primitive.allCases) { prim in
                             Label {
                                 Text(prim.rawValue)
@@ -138,12 +140,24 @@ struct DatabaseView: View {
                             }
                             .tag(SidebarSelection.primitive(space: space, primitive: prim))
                         }
-                    } header: {
-                        Label(space, systemImage: "square.stack.3d.up")
+                    } label: {
+                        SidebarPanelHeader(space, systemImage: "square.stack.3d.up")
                     }
                 }
 
                 Section {
+                    Label {
+                        Text("Graph")
+                    } icon: {
+                        Image(systemName: "circle.hexagongrid")
+                            .foregroundStyle(.teal)
+                    }
+                    .tag(SidebarSelection.graph)
+                } header: {
+                    SidebarPanelHeader("Graph", systemImage: "circle.hexagongrid")
+                }
+
+                DisclosureGroup(isExpanded: $isToolsExpanded) {
                     ForEach(TopLevelItem.allCases) { item in
                         Label {
                             Text(item.rawValue)
@@ -153,8 +167,8 @@ struct DatabaseView: View {
                         }
                         .tag(SidebarSelection.topLevel(item))
                     }
-                } header: {
-                    Label("Tools", systemImage: "wrench.and.screwdriver")
+                } label: {
+                    SidebarPanelHeader("Tools", systemImage: "wrench.and.screwdriver")
                 }
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: StrataLayout.sidebarIdealWidth)
@@ -252,9 +266,9 @@ struct DatabaseView: View {
                         JsonStoreView()
                     case .vectors:
                         VectorStoreView()
-                    case .graph:
-                        GraphView()
                     }
+                case .graph:
+                    GraphView()
                 case .topLevel(let item):
                     switch item {
                     case .search:
@@ -394,6 +408,13 @@ struct DatabaseView: View {
             if case .primitive(let space, _) = selection {
                 appState.selectedSpace = space
             }
+        }
+        .onChange(of: appState.spaces) {
+            // Keep newly added spaces expanded by default
+            expandedSpaces.formUnion(appState.spaces)
+        }
+        .onAppear {
+            expandedSpaces = Set(appState.spaces)
         }
         .onChange(of: appState.selectedBranch) {
             selection = .info
@@ -669,6 +690,13 @@ struct DatabaseView: View {
                 }
             }
         }
+    }
+
+    private func spaceBinding(_ space: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedSpaces.contains(space) },
+            set: { if $0 { expandedSpaces.insert(space) } else { expandedSpaces.remove(space) } }
+        )
     }
 
     private func importBranchPanel() {

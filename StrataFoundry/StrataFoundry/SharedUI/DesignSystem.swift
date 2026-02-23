@@ -52,6 +52,35 @@ struct StrataErrorCallout: View {
     }
 }
 
+struct SidebarPanelHeader: View {
+    let title: String
+    let systemImage: String?
+
+    init(_ title: String, systemImage: String? = nil) {
+        self.title = title
+        self.systemImage = systemImage
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Text(title.uppercased())
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .tracking(0.5)
+            Spacer()
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .background(.quaternary.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+}
+
 struct StrataSuccessCallout: View {
     let message: String
 
