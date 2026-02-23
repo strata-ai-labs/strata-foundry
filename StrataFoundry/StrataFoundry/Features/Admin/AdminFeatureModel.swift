@@ -105,15 +105,7 @@ final class AdminFeatureModel {
         retentionStats = nil
         retentionError = nil
         do {
-            let stats = try await adminService.retentionStats()
-            let data = try JSONEncoder.strataEncoder.encode(stats)
-            if let obj = try? JSONSerialization.jsonObject(with: data),
-               let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
-               let str = String(data: pretty, encoding: .utf8) {
-                retentionStats = str
-            } else {
-                retentionStats = String(data: data, encoding: .utf8)
-            }
+            retentionStats = try await adminService.retentionStats()
         } catch {
             retentionError = error.localizedDescription
         }
@@ -123,15 +115,7 @@ final class AdminFeatureModel {
         retentionPreview = nil
         retentionError = nil
         do {
-            let preview = try await adminService.retentionPreview()
-            let data = try JSONEncoder.strataEncoder.encode(preview)
-            if let obj = try? JSONSerialization.jsonObject(with: data),
-               let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
-               let str = String(data: pretty, encoding: .utf8) {
-                retentionPreview = str
-            } else {
-                retentionPreview = String(data: data, encoding: .utf8)
-            }
+            retentionPreview = try await adminService.retentionPreview()
         } catch {
             retentionError = error.localizedDescription
         }

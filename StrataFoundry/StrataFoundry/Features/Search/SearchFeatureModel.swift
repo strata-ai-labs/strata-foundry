@@ -47,8 +47,8 @@ final class SearchFeatureModel {
         let space: String? = appState.selectedSpace == "default" ? nil : appState.selectedSpace
         let primitives: [String]? = selectedPrimitives.isEmpty ? nil : Array(selectedPrimitives)
         let timeRange: TimeRangeInput? = useTimeRange ? TimeRangeInput(
-            start: UInt64(startDate.timeIntervalSince1970 * 1_000_000),
-            end: UInt64(endDate.timeIntervalSince1970 * 1_000_000)
+            start: String(UInt64(startDate.timeIntervalSince1970 * 1_000_000)),
+            end: String(UInt64(endDate.timeIntervalSince1970 * 1_000_000))
         ) : nil
 
         do {
@@ -69,8 +69,8 @@ final class SearchFeatureModel {
                     id: UUID(),
                     entity: hit.entity,
                     primitive: hit.primitive,
-                    score: hit.score,
-                    rank: hit.rank.map { Int($0) } ?? (index + 1),
+                    score: Double(hit.score),
+                    rank: Int(hit.rank),
                     snippet: hit.snippet ?? ""
                 )
             }

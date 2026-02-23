@@ -79,12 +79,12 @@ final class ModelsFeatureModel {
     private func toDisplay(_ m: ModelInfoOutput) -> ModelDisplay {
         ModelDisplay(
             name: m.name,
-            task: m.task ?? "",
-            architecture: m.architecture ?? "",
-            defaultQuant: m.defaultQuant ?? "",
-            embeddingDim: m.embeddingDim.map { Int($0) } ?? 0,
-            isLocal: m.isLocal ?? false,
-            sizeBytes: m.sizeBytes.map { Int($0) } ?? 0
+            task: m.task,
+            architecture: m.architecture,
+            defaultQuant: m.defaultQuant,
+            embeddingDim: m.embeddingDim,
+            isLocal: m.isLocal,
+            sizeBytes: Int(m.sizeBytes)
         )
     }
 
@@ -94,8 +94,8 @@ final class ModelsFeatureModel {
         defer { isPulling = false }
 
         do {
-            let info = try await modelService.pull(model: name)
-            pullMessage = "Pulled \(name)\(info.path.map { " to \($0)" } ?? "")"
+            let info = try await modelService.pull(name: name)
+            pullMessage = "Pulled \(name) to \(info.path)"
             await loadModels()
         } catch {
             pullMessage = "Pull failed: \(error.localizedDescription)"

@@ -292,7 +292,7 @@ final class GraphFeatureModel {
                 if let propsObj = n["properties"] {
                     properties = StrataValue.fromJSONObject(propsObj)
                 }
-                nodes.append(BulkGraphNode(nodeId: nodeId, label: label, properties: properties))
+                nodes.append(BulkGraphNode(nodeId: nodeId, entityRef: label, properties: properties))
             }
         }
 

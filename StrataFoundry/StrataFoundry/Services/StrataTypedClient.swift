@@ -40,6 +40,14 @@ final class StrataTypedClient: @unchecked Sendable {
         }
     }
 
+    /// Execute a typed command and return the raw JSON response string.
+    /// Useful when the output doesn't need to be decoded into `StrataOutput`.
+    func executeRawJSON(_ command: StrataCommand) async throws -> String {
+        let jsonData = try JSONEncoder.strataEncoder.encode(command)
+        let jsonString = String(data: jsonData, encoding: .utf8)!
+        return try await transport.executeRaw(jsonString)
+    }
+
     /// Whether the underlying transport has an open database.
     var isOpen: Bool { transport.isOpen }
 }

@@ -58,20 +58,16 @@ final class GenerationFeatureModel {
 
         do {
             let result = try await generationService.generate(
+                model: genModel,
                 prompt: genPrompt,
-                model: genModel.isEmpty ? nil : genModel,
-                maxTokens: UInt64(genMaxTokens),
-                temperature: Double(genTemperature),
-                topK: UInt64(genTopK),
-                topP: Double(genTopP),
+                maxTokens: Int(genMaxTokens),
+                temperature: Float(genTemperature),
+                topK: Int(genTopK),
+                topP: Float(genTopP),
                 seed: UInt64(genSeed)
             )
             genResult = result.text
-            let stopReason = result.stopReason ?? ""
-            let promptTokens = result.promptTokens ?? 0
-            let completionTokens = result.completionTokens ?? 0
-            let model = result.model ?? ""
-            genMeta = "Model: \(model) | Stop: \(stopReason) | Prompt tokens: \(promptTokens) | Completion tokens: \(completionTokens)"
+            genMeta = "Model: \(result.model) | Stop: \(result.stopReason) | Prompt tokens: \(result.promptTokens) | Completion tokens: \(result.completionTokens)"
         } catch {
             genError = error.localizedDescription
         }
@@ -82,12 +78,11 @@ final class GenerationFeatureModel {
         tokError = nil
         do {
             let result = try await generationService.tokenize(
-                text: tokText,
-                model: tokModel.isEmpty ? nil : tokModel
+                model: tokModel,
+                text: tokText
             )
             let idsStr = result.ids.map { "\($0)" }.joined(separator: ", ")
-            let model = result.model ?? ""
-            tokResult = "[\(idsStr)]\n\nCount: \(result.count)\(model.isEmpty ? "" : " | Model: \(model)")"
+            tokResult = "[\(idsStr)]\n\nCount: \(result.count)\(result.model.isEmpty ? "" : " | Model: \(result.model)")"
         } catch {
             tokError = error.localizedDescription
         }
@@ -101,8 +96,8 @@ final class GenerationFeatureModel {
             detokError = "Invalid token IDs: must be a JSON array of integers"
             return
         }
-        let ids = arr.compactMap { elem -> UInt64? in
-            if let n = elem as? NSNumber { return n.uint64Value }
+        let ids = arr.compactMap { elem -> UInt32? in
+            if let n = elem as? NSNumber { return UInt32(n.intValue) }
             return nil
         }
         guard ids.count == arr.count else {
@@ -111,8 +106,8 @@ final class GenerationFeatureModel {
         }
         do {
             let text = try await generationService.detokenize(
-                ids: ids,
-                model: detokModel.isEmpty ? nil : detokModel
+                model: detokModel,
+                ids: ids
             )
             detokResult = text
         } catch {

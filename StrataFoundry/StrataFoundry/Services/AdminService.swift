@@ -76,12 +76,22 @@ final class AdminService: Sendable {
         _ = try await client.execute(.retentionApply(branch: branch))
     }
 
-    func retentionStats(branch: String? = nil) async throws -> StrataOutput {
-        return try await client.execute(.retentionStats(branch: branch))
+    func retentionStats(branch: String? = nil) async throws -> String {
+        let raw = try await client.executeRawJSON(.retentionStats(branch: branch))
+        return prettyPrintJSON(raw) ?? raw
     }
 
-    func retentionPreview(branch: String? = nil) async throws -> StrataOutput {
-        return try await client.execute(.retentionPreview(branch: branch))
+    func retentionPreview(branch: String? = nil) async throws -> String {
+        let raw = try await client.executeRawJSON(.retentionPreview(branch: branch))
+        return prettyPrintJSON(raw) ?? raw
+    }
+
+    private func prettyPrintJSON(_ raw: String) -> String? {
+        guard let data = raw.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
+              let str = String(data: pretty, encoding: .utf8) else { return nil }
+        return str
     }
 
     func durabilityCounters() async throws -> WalCounters {
