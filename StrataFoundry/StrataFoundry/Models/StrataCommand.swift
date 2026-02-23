@@ -403,7 +403,7 @@ enum StrataCommand: Encodable, Sendable {
 
         // Model Management
         case .modelsList:
-            try container.encode(EmptyPayload(), forKey: .init("ModelsList"))
+            try container.encodeNil(forKey: .init("ModelsList"))
         case let .modelsPull(name):
             try container.encode(
                 NamePayload(name: name),
@@ -451,7 +451,7 @@ enum StrataCommand: Encodable, Sendable {
         case .embedStatus:
             try container.encodeNil(forKey: .init("EmbedStatus"))
         case .configGet:
-            try container.encode(EmptyPayload(), forKey: .init("ConfigGet"))
+            try container.encodeNil(forKey: .init("ConfigGet"))
         case let .configSetAutoEmbed(enabled):
             try container.encode(
                 AutoEmbedPayload(enabled: enabled),
