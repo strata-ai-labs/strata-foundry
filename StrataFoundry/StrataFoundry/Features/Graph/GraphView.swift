@@ -56,7 +56,7 @@ struct GraphView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .frame(maxWidth: 320)
+                    .frame(maxWidth: 480)
                 }
             }
         }
@@ -202,6 +202,8 @@ struct GraphView: View {
                                 bfsModeView(model)
                             case .bulkInsert:
                                 bulkInsertModeView(model)
+                            case .ontology:
+                                ontologyModeView(model)
                             case .visualize:
                                 EmptyView()
                             }
@@ -269,6 +271,12 @@ struct GraphView: View {
                 TextField("Label (optional)", text: Binding(
                     get: { model.nodeLabelField },
                     set: { model.nodeLabelField = $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
+
+                TextField("Object Type (optional)", text: Binding(
+                    get: { model.nodeObjectTypeField },
+                    set: { model.nodeObjectTypeField = $0 }
                 ))
                 .textFieldStyle(.roundedBorder)
 
@@ -627,6 +635,267 @@ struct GraphView: View {
             StrataSuccessCallout(message: result)
         }
         if let error = model.bulkError {
+            StrataErrorCallout(message: error)
+        }
+    }
+
+    // MARK: - Ontology Mode
+
+    @ViewBuilder
+    private func ontologyModeView(_ model: GraphFeatureModel) -> some View {
+        Group {}
+            .task(id: model.selectedGraph) {
+                await model.loadOntology()
+            }
+
+        if model.isTimeTraveling {
+            Label("Ontology write operations are disabled during time travel", systemImage: "info.circle")
+                .foregroundStyle(.orange)
+                .font(.callout)
+        }
+
+        // Status bar
+        GroupBox("Ontology Status") {
+            VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                HStack {
+                    if model.isOntologyFrozen {
+                        Text("Frozen")
+                            .font(.caption.bold())
+                            .padding(.horizontal, StrataSpacing.xs)
+                            .padding(.vertical, 2)
+                            .background(.blue.opacity(0.2))
+                            .clipShape(Capsule())
+                    } else {
+                        Text("Draft")
+                            .font(.caption.bold())
+                            .padding(.horizontal, StrataSpacing.xs)
+                            .padding(.vertical, 2)
+                            .background(.green.opacity(0.2))
+                            .clipShape(Capsule())
+                    }
+                    Spacer()
+                    Button("Freeze Ontology") {
+                        Task { await model.freezeOntology() }
+                    }
+                    .disabled(model.isOntologyFrozen || model.isTimeTraveling)
+                    Button("View Summary") {
+                        Task { await model.loadOntologySummary() }
+                    }
+                    Button("Refresh") {
+                        Task { await model.loadOntology() }
+                    }
+                }
+            }
+            .padding(StrataSpacing.xs)
+        }
+
+        // Object Types
+        GroupBox("Object Types (\(model.objectTypes.count))") {
+            VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                if model.objectTypes.isEmpty {
+                    Text("No object types defined")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.objectTypes, id: \.self) { typeName in
+                        HStack {
+                            Text(typeName)
+                                .strataKeyStyle()
+                            Spacer()
+                            Button("View") {
+                                Task { await model.getObjectTypeDetail(typeName) }
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                            Button("Nodes") {
+                                Task { await model.loadNodesByType(typeName) }
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                            Button("Delete") {
+                                Task { await model.deleteObjectType(typeName) }
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .disabled(model.isOntologyFrozen || model.isTimeTraveling)
+                        }
+                    }
+                }
+
+                Divider()
+
+                Text("Define Object Type")
+                    .font(.caption.bold())
+                TextField("Name", text: Binding(
+                    get: { model.defineObjectTypeName },
+                    set: { model.defineObjectTypeName = $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .disabled(model.isOntologyFrozen || model.isTimeTraveling)
+
+                Text("Properties (optional JSON object)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: Binding(
+                    get: { model.defineObjectTypeJSON },
+                    set: { model.defineObjectTypeJSON = $0 }
+                ))
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 60)
+                .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
+                .disabled(model.isOntologyFrozen || model.isTimeTraveling)
+
+                Button("Define Object Type") {
+                    Task { await model.defineObjectType() }
+                }
+                .disabled(model.isOntologyFrozen || model.isTimeTraveling || model.defineObjectTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(StrataSpacing.xs)
+        }
+
+        // Nodes by Type results
+        if let typeName = model.nodesByTypeSelected {
+            GroupBox("Nodes of type \"\(typeName)\" (\(model.nodesByTypeResult.count))") {
+                if model.nodesByTypeResult.isEmpty {
+                    Text("No nodes of this type")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(StrataSpacing.xs)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: StrataSpacing.xxs) {
+                            ForEach(model.nodesByTypeResult, id: \.self) { nodeId in
+                                Text(nodeId)
+                                    .strataKeyStyle()
+                                    .padding(.vertical, 2)
+                            }
+                        }
+                        .padding(StrataSpacing.xs)
+                    }
+                    .frame(maxHeight: 150)
+                }
+            }
+        }
+
+        // Link Types
+        GroupBox("Link Types (\(model.linkTypes.count))") {
+            VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                if model.linkTypes.isEmpty {
+                    Text("No link types defined")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.linkTypes, id: \.self) { typeName in
+                        HStack {
+                            Text(typeName)
+                                .strataKeyStyle()
+                            Spacer()
+                            Button("View") {
+                                Task { await model.getLinkTypeDetail(typeName) }
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                            Button("Delete") {
+                                Task { await model.deleteLinkType(typeName) }
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .disabled(model.isOntologyFrozen || model.isTimeTraveling)
+                        }
+                    }
+                }
+
+                Divider()
+
+                Text("Define Link Type")
+                    .font(.caption.bold())
+                TextField("Name", text: Binding(
+                    get: { model.defineLinkTypeName },
+                    set: { model.defineLinkTypeName = $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .disabled(model.isOntologyFrozen || model.isTimeTraveling)
+
+                HStack {
+                    TextField("Source Type", text: Binding(
+                        get: { model.defineLinkTypeSource },
+                        set: { model.defineLinkTypeSource = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    TextField("Target Type", text: Binding(
+                        get: { model.defineLinkTypeTarget },
+                        set: { model.defineLinkTypeTarget = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                }
+                .disabled(model.isOntologyFrozen || model.isTimeTraveling)
+
+                TextField("Cardinality (optional, e.g. one_to_many)", text: Binding(
+                    get: { model.defineLinkTypeCardinality },
+                    set: { model.defineLinkTypeCardinality = $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .disabled(model.isOntologyFrozen || model.isTimeTraveling)
+
+                Text("Properties (optional JSON object)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: Binding(
+                    get: { model.defineLinkTypeJSON },
+                    set: { model.defineLinkTypeJSON = $0 }
+                ))
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 60)
+                .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
+                .disabled(model.isOntologyFrozen || model.isTimeTraveling)
+
+                Button("Define Link Type") {
+                    Task { await model.defineLinkType() }
+                }
+                .disabled(model.isOntologyFrozen || model.isTimeTraveling || model.defineLinkTypeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(StrataSpacing.xs)
+        }
+
+        // Type detail display
+        if let detail = model.objectTypeDetail, let name = model.selectedObjectType {
+            GroupBox("Object Type: \(name)") {
+                Text(detail)
+                    .strataCodeStyle()
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+
+        if let detail = model.linkTypeDetail, let name = model.selectedLinkType {
+            GroupBox("Link Type: \(name)") {
+                Text(detail)
+                    .strataCodeStyle()
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+
+        // Summary display
+        if let summary = model.ontologySummaryText {
+            GroupBox("Ontology Summary") {
+                ScrollView {
+                    Text(summary)
+                        .strataCodeStyle()
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 300)
+            }
+        }
+
+        // Error / Success callouts
+        if let success = model.ontologySuccess {
+            StrataSuccessCallout(message: success)
+        }
+        if let error = model.ontologyError {
             StrataErrorCallout(message: error)
         }
     }

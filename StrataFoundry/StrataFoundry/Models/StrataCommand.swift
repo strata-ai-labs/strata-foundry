@@ -129,7 +129,7 @@ enum StrataCommand: Encodable, Sendable {
     case graphDelete(branch: String? = nil, graph: String)
     case graphList(branch: String? = nil)
     case graphGetMeta(branch: String? = nil, graph: String)
-    case graphAddNode(branch: String? = nil, graph: String, nodeId: String, entityRef: String? = nil, properties: StrataValue? = nil)
+    case graphAddNode(branch: String? = nil, graph: String, nodeId: String, entityRef: String? = nil, properties: StrataValue? = nil, objectType: String? = nil)
     case graphGetNode(branch: String? = nil, graph: String, nodeId: String)
     case graphRemoveNode(branch: String? = nil, graph: String, nodeId: String)
     case graphListNodes(branch: String? = nil, graph: String)
@@ -138,6 +138,20 @@ enum StrataCommand: Encodable, Sendable {
     case graphNeighbors(branch: String? = nil, graph: String, nodeId: String, direction: String? = nil, edgeType: String? = nil)
     case graphBulkInsert(branch: String? = nil, graph: String, nodes: [BulkGraphNode], edges: [BulkGraphEdge], chunkSize: Int? = nil)
     case graphBfs(branch: String? = nil, graph: String, start: String, maxDepth: Int, maxNodes: Int? = nil, edgeTypes: [String]? = nil, direction: String? = nil)
+
+    // MARK: - Graph Ontology (12)
+    case graphDefineObjectType(branch: String? = nil, graph: String, definition: StrataValue)
+    case graphGetObjectType(branch: String? = nil, graph: String, name: String)
+    case graphListObjectTypes(branch: String? = nil, graph: String)
+    case graphDeleteObjectType(branch: String? = nil, graph: String, name: String)
+    case graphDefineLinkType(branch: String? = nil, graph: String, definition: StrataValue)
+    case graphGetLinkType(branch: String? = nil, graph: String, name: String)
+    case graphListLinkTypes(branch: String? = nil, graph: String)
+    case graphDeleteLinkType(branch: String? = nil, graph: String, name: String)
+    case graphFreezeOntology(branch: String? = nil, graph: String)
+    case graphOntologyStatus(branch: String? = nil, graph: String)
+    case graphOntologySummary(branch: String? = nil, graph: String)
+    case graphNodesByType(branch: String? = nil, graph: String, objectType: String)
 
     // MARK: - Encoding
 
@@ -478,9 +492,9 @@ enum StrataCommand: Encodable, Sendable {
             try container.encode(
                 BranchGraph(branch: branch, graph: graph),
                 forKey: .init("GraphGetMeta"))
-        case let .graphAddNode(branch, graph, nodeId, entityRef, properties):
+        case let .graphAddNode(branch, graph, nodeId, entityRef, properties, objectType):
             try container.encode(
-                GraphAddNodePayload(branch: branch, graph: graph, nodeId: nodeId, entityRef: entityRef, properties: properties),
+                GraphAddNodePayload(branch: branch, graph: graph, nodeId: nodeId, entityRef: entityRef, properties: properties, objectType: objectType),
                 forKey: .init("GraphAddNode"))
         case let .graphGetNode(branch, graph, nodeId):
             try container.encode(
@@ -514,6 +528,56 @@ enum StrataCommand: Encodable, Sendable {
             try container.encode(
                 GraphBfsPayload(branch: branch, graph: graph, start: start, maxDepth: maxDepth, maxNodes: maxNodes, edgeTypes: edgeTypes, direction: direction),
                 forKey: .init("GraphBfs"))
+
+        // Graph Ontology
+        case let .graphDefineObjectType(branch, graph, definition):
+            try container.encode(
+                GraphDefineTypePayload(branch: branch, graph: graph, definition: definition),
+                forKey: .init("GraphDefineObjectType"))
+        case let .graphGetObjectType(branch, graph, name):
+            try container.encode(
+                GraphTypeNamePayload(branch: branch, graph: graph, name: name),
+                forKey: .init("GraphGetObjectType"))
+        case let .graphListObjectTypes(branch, graph):
+            try container.encode(
+                BranchGraph(branch: branch, graph: graph),
+                forKey: .init("GraphListObjectTypes"))
+        case let .graphDeleteObjectType(branch, graph, name):
+            try container.encode(
+                GraphTypeNamePayload(branch: branch, graph: graph, name: name),
+                forKey: .init("GraphDeleteObjectType"))
+        case let .graphDefineLinkType(branch, graph, definition):
+            try container.encode(
+                GraphDefineTypePayload(branch: branch, graph: graph, definition: definition),
+                forKey: .init("GraphDefineLinkType"))
+        case let .graphGetLinkType(branch, graph, name):
+            try container.encode(
+                GraphTypeNamePayload(branch: branch, graph: graph, name: name),
+                forKey: .init("GraphGetLinkType"))
+        case let .graphListLinkTypes(branch, graph):
+            try container.encode(
+                BranchGraph(branch: branch, graph: graph),
+                forKey: .init("GraphListLinkTypes"))
+        case let .graphDeleteLinkType(branch, graph, name):
+            try container.encode(
+                GraphTypeNamePayload(branch: branch, graph: graph, name: name),
+                forKey: .init("GraphDeleteLinkType"))
+        case let .graphFreezeOntology(branch, graph):
+            try container.encode(
+                BranchGraph(branch: branch, graph: graph),
+                forKey: .init("GraphFreezeOntology"))
+        case let .graphOntologyStatus(branch, graph):
+            try container.encode(
+                BranchGraph(branch: branch, graph: graph),
+                forKey: .init("GraphOntologyStatus"))
+        case let .graphOntologySummary(branch, graph):
+            try container.encode(
+                BranchGraph(branch: branch, graph: graph),
+                forKey: .init("GraphOntologySummary"))
+        case let .graphNodesByType(branch, graph, objectType):
+            try container.encode(
+                GraphNodesByTypePayload(branch: branch, graph: graph, objectType: objectType),
+                forKey: .init("GraphNodesByType"))
         }
     }
 }
@@ -883,7 +947,8 @@ private struct GraphAddNodePayload: Encodable {
     let nodeId: String
     let entityRef: String?
     let properties: StrataValue?
-    enum CodingKeys: String, CodingKey { case branch, graph, nodeId = "node_id", entityRef = "entity_ref", properties }
+    let objectType: String?
+    enum CodingKeys: String, CodingKey { case branch, graph, nodeId = "node_id", entityRef = "entity_ref", properties, objectType = "object_type" }
 }
 
 private struct GraphAddEdgePayload: Encodable {
@@ -939,4 +1004,23 @@ private struct GraphBfsPayload: Encodable {
         case edgeTypes = "edge_types"
         case direction
     }
+}
+
+private struct GraphTypeNamePayload: Encodable {
+    let branch: String?
+    let graph: String
+    let name: String
+}
+
+private struct GraphDefineTypePayload: Encodable {
+    let branch: String?
+    let graph: String
+    let definition: StrataValue
+}
+
+private struct GraphNodesByTypePayload: Encodable {
+    let branch: String?
+    let graph: String
+    let objectType: String
+    enum CodingKeys: String, CodingKey { case branch, graph, objectType = "object_type" }
 }

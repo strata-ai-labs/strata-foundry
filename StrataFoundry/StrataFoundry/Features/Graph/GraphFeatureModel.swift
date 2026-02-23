@@ -7,6 +7,7 @@ enum GraphPaneMode: String, CaseIterable {
     case bfs = "BFS"
     case visualize = "Visualize"
     case bulkInsert = "Bulk Insert"
+    case ontology = "Ontology"
 }
 
 struct NeighborDisplay: Identifiable {
@@ -84,6 +85,36 @@ final class GraphFeatureModel {
     var vizEdges: [GraphCanvasEdge] = []
     var isLoadingViz = false
     var vizError: String?
+
+    // Ontology
+    var ontologyStatusText: String?
+    var objectTypes: [String] = []
+    var linkTypes: [String] = []
+    var selectedObjectType: String?
+    var selectedLinkType: String?
+    var objectTypeDetail: String?
+    var linkTypeDetail: String?
+    var ontologySummaryText: String?
+    var ontologyError: String?
+    var ontologySuccess: String?
+
+    // Define object type form
+    var defineObjectTypeName = ""
+    var defineObjectTypeJSON = ""
+
+    // Define link type form
+    var defineLinkTypeName = ""
+    var defineLinkTypeSource = ""
+    var defineLinkTypeTarget = ""
+    var defineLinkTypeCardinality = ""
+    var defineLinkTypeJSON = ""
+
+    // Nodes by type
+    var nodesByTypeResult: [String] = []
+    var nodesByTypeSelected: String?
+
+    // Node object type field (for Add Node form)
+    var nodeObjectTypeField = ""
 
     var isTimeTraveling: Bool { appState.timeTravelDate != nil }
 
@@ -179,8 +210,9 @@ final class GraphFeatureModel {
             properties = parsed
         }
         let label: String? = nodeLabelField.isEmpty ? nil : nodeLabelField
+        let objectType: String? = nodeObjectTypeField.isEmpty ? nil : nodeObjectTypeField
         do {
-            try await graphService.addNode(graph: graphName, nodeId: nodeIdField, entityRef: label, properties: properties, branch: appState.selectedBranch)
+            try await graphService.addNode(graph: graphName, nodeId: nodeIdField, entityRef: label, properties: properties, objectType: objectType, branch: appState.selectedBranch)
             await loadNodes()
             nodeResult = "Node \"\(nodeIdField)\" added."
         } catch {
@@ -420,6 +452,26 @@ final class GraphFeatureModel {
         vizEdges = []
         isLoadingViz = false
         vizError = nil
+        ontologyStatusText = nil
+        objectTypes = []
+        linkTypes = []
+        selectedObjectType = nil
+        selectedLinkType = nil
+        objectTypeDetail = nil
+        linkTypeDetail = nil
+        ontologySummaryText = nil
+        ontologyError = nil
+        ontologySuccess = nil
+        defineObjectTypeName = ""
+        defineObjectTypeJSON = ""
+        defineLinkTypeName = ""
+        defineLinkTypeSource = ""
+        defineLinkTypeTarget = ""
+        defineLinkTypeCardinality = ""
+        defineLinkTypeJSON = ""
+        nodesByTypeResult = []
+        nodesByTypeSelected = nil
+        nodeObjectTypeField = ""
     }
 
     func onSelectGraph(_ name: String?) {
@@ -431,5 +483,238 @@ final class GraphFeatureModel {
                 await loadNodes()
             }
         }
+    }
+
+    // MARK: - Ontology
+
+    func loadOntology() async {
+        guard let graphName = selectedGraph else { return }
+        ontologyError = nil
+        do {
+            async let statusResult = graphService.ontologyStatus(graph: graphName, branch: appState.selectedBranch)
+            async let objectTypesResult = graphService.listObjectTypes(graph: graphName, branch: appState.selectedBranch)
+            async let linkTypesResult = graphService.listLinkTypes(graph: graphName, branch: appState.selectedBranch)
+
+            let status = try await statusResult
+            objectTypes = try await objectTypesResult
+            linkTypes = try await linkTypesResult
+
+            if let statusVal = status {
+                // Extract the status string from the response.
+                // The backend may return {"status":"frozen",...} or just "frozen".
+                switch statusVal {
+                case .string(let s):
+                    ontologyStatusText = s
+                case .object(let map):
+                    if case .string(let s) = map["status"] {
+                        ontologyStatusText = s
+                    } else {
+                        ontologyStatusText = statusVal.prettyJSON
+                    }
+                default:
+                    ontologyStatusText = statusVal.prettyJSON
+                }
+            } else {
+                ontologyStatusText = "draft"
+            }
+        } catch {
+            ontologyError = error.localizedDescription
+        }
+    }
+
+    func defineObjectType() async {
+        guard let graphName = selectedGraph else { return }
+        ontologyError = nil
+        ontologySuccess = nil
+
+        let name = defineObjectTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            ontologyError = "Object type name is required"
+            return
+        }
+
+        var propertiesMap: [String: StrataValue] = [:]
+        let jsonTrimmed = defineObjectTypeJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !jsonTrimmed.isEmpty {
+            guard let parsed = StrataValue.fromJSONString(jsonTrimmed),
+                  case .object = parsed else {
+                ontologyError = "Invalid properties: must be a JSON object"
+                return
+            }
+            if case .object(let map) = parsed {
+                propertiesMap = map
+            }
+        }
+
+        var definitionMap: [String: StrataValue] = [
+            "name": .string(name),
+        ]
+        if !propertiesMap.isEmpty {
+            definitionMap["properties"] = .object(propertiesMap)
+        }
+        let definition = StrataValue.object(definitionMap)
+
+        do {
+            try await graphService.defineObjectType(graph: graphName, definition: definition, branch: appState.selectedBranch)
+            ontologySuccess = "Object type \"\(name)\" defined."
+            defineObjectTypeName = ""
+            defineObjectTypeJSON = ""
+            await loadOntology()
+        } catch {
+            ontologyError = error.localizedDescription
+        }
+    }
+
+    func defineLinkType() async {
+        guard let graphName = selectedGraph else { return }
+        ontologyError = nil
+        ontologySuccess = nil
+
+        let name = defineLinkTypeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            ontologyError = "Link type name is required"
+            return
+        }
+
+        var definitionMap: [String: StrataValue] = [
+            "name": .string(name),
+        ]
+        let source = defineLinkTypeSource.trimmingCharacters(in: .whitespacesAndNewlines)
+        let target = defineLinkTypeTarget.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cardinality = defineLinkTypeCardinality.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !source.isEmpty { definitionMap["source_type"] = .string(source) }
+        if !target.isEmpty { definitionMap["target_type"] = .string(target) }
+        if !cardinality.isEmpty { definitionMap["cardinality"] = .string(cardinality) }
+
+        let jsonTrimmed = defineLinkTypeJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !jsonTrimmed.isEmpty {
+            guard let parsed = StrataValue.fromJSONString(jsonTrimmed),
+                  case .object(let map) = parsed else {
+                ontologyError = "Invalid properties: must be a JSON object"
+                return
+            }
+            definitionMap["properties"] = .object(map)
+        }
+
+        let definition = StrataValue.object(definitionMap)
+
+        do {
+            try await graphService.defineLinkType(graph: graphName, definition: definition, branch: appState.selectedBranch)
+            ontologySuccess = "Link type \"\(name)\" defined."
+            defineLinkTypeName = ""
+            defineLinkTypeSource = ""
+            defineLinkTypeTarget = ""
+            defineLinkTypeCardinality = ""
+            defineLinkTypeJSON = ""
+            await loadOntology()
+        } catch {
+            ontologyError = error.localizedDescription
+        }
+    }
+
+    func getObjectTypeDetail(_ name: String) async {
+        guard let graphName = selectedGraph else { return }
+        ontologyError = nil
+        selectedObjectType = name
+        objectTypeDetail = nil
+        do {
+            if let val = try await graphService.getObjectType(graph: graphName, name: name, branch: appState.selectedBranch) {
+                objectTypeDetail = val.prettyJSON
+            } else {
+                objectTypeDetail = "Not found"
+            }
+        } catch {
+            ontologyError = error.localizedDescription
+        }
+    }
+
+    func getLinkTypeDetail(_ name: String) async {
+        guard let graphName = selectedGraph else { return }
+        ontologyError = nil
+        selectedLinkType = name
+        linkTypeDetail = nil
+        do {
+            if let val = try await graphService.getLinkType(graph: graphName, name: name, branch: appState.selectedBranch) {
+                linkTypeDetail = val.prettyJSON
+            } else {
+                linkTypeDetail = "Not found"
+            }
+        } catch {
+            ontologyError = error.localizedDescription
+        }
+    }
+
+    func deleteObjectType(_ name: String) async {
+        guard let graphName = selectedGraph else { return }
+        ontologyError = nil
+        ontologySuccess = nil
+        do {
+            try await graphService.deleteObjectType(graph: graphName, name: name, branch: appState.selectedBranch)
+            ontologySuccess = "Object type \"\(name)\" deleted."
+            if selectedObjectType == name { objectTypeDetail = nil; selectedObjectType = nil }
+            await loadOntology()
+        } catch {
+            ontologyError = error.localizedDescription
+        }
+    }
+
+    func deleteLinkType(_ name: String) async {
+        guard let graphName = selectedGraph else { return }
+        ontologyError = nil
+        ontologySuccess = nil
+        do {
+            try await graphService.deleteLinkType(graph: graphName, name: name, branch: appState.selectedBranch)
+            ontologySuccess = "Link type \"\(name)\" deleted."
+            if selectedLinkType == name { linkTypeDetail = nil; selectedLinkType = nil }
+            await loadOntology()
+        } catch {
+            ontologyError = error.localizedDescription
+        }
+    }
+
+    func freezeOntology() async {
+        guard let graphName = selectedGraph else { return }
+        ontologyError = nil
+        ontologySuccess = nil
+        do {
+            try await graphService.freezeOntology(graph: graphName, branch: appState.selectedBranch)
+            ontologySuccess = "Ontology frozen."
+            await loadOntology()
+        } catch {
+            ontologyError = error.localizedDescription
+        }
+    }
+
+    func loadOntologySummary() async {
+        guard let graphName = selectedGraph else { return }
+        ontologyError = nil
+        ontologySummaryText = nil
+        do {
+            if let val = try await graphService.ontologySummary(graph: graphName, branch: appState.selectedBranch) {
+                ontologySummaryText = val.prettyJSON
+            } else {
+                ontologySummaryText = "No ontology summary available"
+            }
+        } catch {
+            ontologyError = error.localizedDescription
+        }
+    }
+
+    func loadNodesByType(_ objectType: String) async {
+        guard let graphName = selectedGraph else { return }
+        ontologyError = nil
+        nodesByTypeResult = []
+        nodesByTypeSelected = objectType
+        do {
+            nodesByTypeResult = try await graphService.nodesByType(graph: graphName, objectType: objectType, branch: appState.selectedBranch)
+        } catch {
+            ontologyError = error.localizedDescription
+        }
+    }
+
+    var isOntologyFrozen: Bool {
+        guard let status = ontologyStatusText else { return false }
+        return status.lowercased() == "frozen"
     }
 }

@@ -41,8 +41,8 @@ final class GraphService: Sendable {
         return val
     }
 
-    func addNode(graph: String, nodeId: String, entityRef: String? = nil, properties: StrataValue? = nil, branch: String? = nil) async throws {
-        let output = try await client.execute(.graphAddNode(branch: branch, graph: graph, nodeId: nodeId, entityRef: entityRef, properties: properties))
+    func addNode(graph: String, nodeId: String, entityRef: String? = nil, properties: StrataValue? = nil, objectType: String? = nil, branch: String? = nil) async throws {
+        let output = try await client.execute(.graphAddNode(branch: branch, graph: graph, nodeId: nodeId, entityRef: entityRef, properties: properties, objectType: objectType))
         guard case .unit = output else {
             throw StrataServiceError.unexpectedOutput(expected: "Unit", got: output.variantName)
         }
@@ -107,5 +107,98 @@ final class GraphService: Sendable {
             throw StrataServiceError.unexpectedOutput(expected: "GraphBfs", got: output.variantName)
         }
         return result
+    }
+
+    // MARK: - Ontology
+
+    func defineObjectType(graph: String, definition: StrataValue, branch: String? = nil) async throws {
+        let output = try await client.execute(.graphDefineObjectType(branch: branch, graph: graph, definition: definition))
+        guard case .unit = output else {
+            throw StrataServiceError.unexpectedOutput(expected: "Unit", got: output.variantName)
+        }
+    }
+
+    func getObjectType(graph: String, name: String, branch: String? = nil) async throws -> StrataValue? {
+        let output = try await client.execute(.graphGetObjectType(branch: branch, graph: graph, name: name))
+        guard case .maybe(let val) = output else {
+            throw StrataServiceError.unexpectedOutput(expected: "Maybe", got: output.variantName)
+        }
+        return val
+    }
+
+    func listObjectTypes(graph: String, branch: String? = nil) async throws -> [String] {
+        let output = try await client.execute(.graphListObjectTypes(branch: branch, graph: graph))
+        guard case .keys(let keys) = output else {
+            throw StrataServiceError.unexpectedOutput(expected: "Keys", got: output.variantName)
+        }
+        return keys
+    }
+
+    func deleteObjectType(graph: String, name: String, branch: String? = nil) async throws {
+        let output = try await client.execute(.graphDeleteObjectType(branch: branch, graph: graph, name: name))
+        guard case .unit = output else {
+            throw StrataServiceError.unexpectedOutput(expected: "Unit", got: output.variantName)
+        }
+    }
+
+    func defineLinkType(graph: String, definition: StrataValue, branch: String? = nil) async throws {
+        let output = try await client.execute(.graphDefineLinkType(branch: branch, graph: graph, definition: definition))
+        guard case .unit = output else {
+            throw StrataServiceError.unexpectedOutput(expected: "Unit", got: output.variantName)
+        }
+    }
+
+    func getLinkType(graph: String, name: String, branch: String? = nil) async throws -> StrataValue? {
+        let output = try await client.execute(.graphGetLinkType(branch: branch, graph: graph, name: name))
+        guard case .maybe(let val) = output else {
+            throw StrataServiceError.unexpectedOutput(expected: "Maybe", got: output.variantName)
+        }
+        return val
+    }
+
+    func listLinkTypes(graph: String, branch: String? = nil) async throws -> [String] {
+        let output = try await client.execute(.graphListLinkTypes(branch: branch, graph: graph))
+        guard case .keys(let keys) = output else {
+            throw StrataServiceError.unexpectedOutput(expected: "Keys", got: output.variantName)
+        }
+        return keys
+    }
+
+    func deleteLinkType(graph: String, name: String, branch: String? = nil) async throws {
+        let output = try await client.execute(.graphDeleteLinkType(branch: branch, graph: graph, name: name))
+        guard case .unit = output else {
+            throw StrataServiceError.unexpectedOutput(expected: "Unit", got: output.variantName)
+        }
+    }
+
+    func freezeOntology(graph: String, branch: String? = nil) async throws {
+        let output = try await client.execute(.graphFreezeOntology(branch: branch, graph: graph))
+        guard case .unit = output else {
+            throw StrataServiceError.unexpectedOutput(expected: "Unit", got: output.variantName)
+        }
+    }
+
+    func ontologyStatus(graph: String, branch: String? = nil) async throws -> StrataValue? {
+        let output = try await client.execute(.graphOntologyStatus(branch: branch, graph: graph))
+        guard case .maybe(let val) = output else {
+            throw StrataServiceError.unexpectedOutput(expected: "Maybe", got: output.variantName)
+        }
+        return val
+    }
+
+    func ontologySummary(graph: String, branch: String? = nil) async throws -> StrataValue? {
+        let output = try await client.execute(.graphOntologySummary(branch: branch, graph: graph))
+        guard case .maybe(let val) = output else {
+            throw StrataServiceError.unexpectedOutput(expected: "Maybe", got: output.variantName)
+        }
+        return val
+    }
+
+    func nodesByType(graph: String, objectType: String, branch: String? = nil) async throws -> [String] {
+        let output = try await client.execute(.graphNodesByType(branch: branch, graph: graph, objectType: objectType))
+        guard case .keys(let keys) = output else {
+            throw StrataServiceError.unexpectedOutput(expected: "Keys", got: output.variantName)
+        }
+        return keys
     }
 }
