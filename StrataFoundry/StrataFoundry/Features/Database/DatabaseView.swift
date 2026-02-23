@@ -70,9 +70,9 @@ struct DatabaseView: View {
     @State private var branchError: String?
 
     // Import/Export
-    @State private var showExportResult: BranchExportResult?
-    @State private var showImportResult: BranchImportResult?
-    @State private var showValidateResult: BundleValidateResult?
+    @State private var showExportResult: StrataBranchExportResult?
+    @State private var showImportResult: StrataBranchImportResult?
+    @State private var showValidateResult: StrataBundleValidateResult?
     @State private var isBranchOperationInProgress = false
 
     // Branch Fork

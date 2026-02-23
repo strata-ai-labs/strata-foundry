@@ -3,6 +3,7 @@
 //  StrataFoundry
 //
 //  Reusable view that fetches and displays version history for a key.
+//  Uses typed services — no raw JSON.
 //
 
 import SwiftUI
@@ -118,114 +119,45 @@ struct VersionHistoryView: View {
     }
 
     private func loadVersions() async {
-        guard let client = appState.client else { return }
+        guard let services = appState.services else { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
-        let commandName: String
-        let keyField: String
-        switch primitive {
-        case "Kv":
-            commandName = "KvGetv"
-            keyField = "key"
-        case "State":
-            commandName = "StateGetv"
-            keyField = "cell"
-        case "Json":
-            commandName = "JsonGetv"
-            keyField = "key"
-        default:
-            errorMessage = "Unknown primitive: \(primitive)"
-            return
-        }
-        var innerCmd: [String: Any] = [
-            keyField: key,
-            "branch": appState.selectedBranch
-        ]
-        if appState.selectedSpace != "default" {
-            innerCmd["space"] = appState.selectedSpace
-        }
-        let wrapper = [commandName: innerCmd]
-        guard let cmdData = try? JSONSerialization.data(withJSONObject: wrapper),
-              let cmd = String(data: cmdData, encoding: .utf8) else {
-            errorMessage = "Failed to build command"
-            return
-        }
+        let branch = appState.selectedBranch
+        let space: String? = appState.selectedSpace == "default" ? nil : appState.selectedSpace
 
         do {
-            let json = try await client.executeRaw(cmd)
-            guard let data = json.data(using: .utf8),
-                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let historyArray = root["VersionHistory"] as? [[String: Any]] else {
-                // Could be null (no history) or a different format
-                if let data = json.data(using: .utf8),
-                   let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   root["VersionHistory"] is NSNull {
-                    versions = []
-                    return
-                }
+            let history: [VersionedValue]?
+            switch primitive {
+            case "Kv":
+                history = try await services.kvService.getVersionHistory(key: key, branch: branch, space: space)
+            case "State":
+                history = try await services.stateService.getVersionHistory(cell: key, branch: branch, space: space)
+            case "Json":
+                history = try await services.jsonService.getVersionHistory(key: key, branch: branch, space: space)
+            default:
+                errorMessage = "Unknown primitive: \(primitive)"
+                return
+            }
+
+            guard let history else {
                 versions = []
                 return
             }
 
-            var entries: [VersionedEntry] = []
-            for (index, item) in historyArray.reversed().enumerated() {
-                let ver = item["version"] as? UInt64
-                    ?? (item["version"] as? Int).map(UInt64.init) ?? 0
-                let ts = item["timestamp"] as? UInt64
-                    ?? (item["timestamp"] as? Int).map(UInt64.init) ?? 0
-                let (display, vType) = formatValue(item["value"])
-                entries.append(VersionedEntry(
+            versions = history.reversed().enumerated().map { index, item in
+                VersionedEntry(
                     id: index,
-                    version: ver,
-                    timestamp: ts,
-                    displayValue: display,
-                    valueType: vType
-                ))
+                    version: item.version,
+                    timestamp: item.timestamp,
+                    displayValue: item.value.prettyJSON,
+                    valueType: item.value.typeTag
+                )
             }
-            versions = entries
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-
-    private func formatValue(_ value: Any?) -> (String, String) {
-        guard let value else { return ("null", "Null") }
-        if let str = value as? String { return (str, "String") }
-        if let num = value as? Int { return ("\(num)", "Int") }
-        if let num = value as? Double { return ("\(num)", "Float") }
-        if let dict = value as? [String: Any], let (tag, inner) = dict.first {
-            switch tag {
-            case "String": return ("\"\(inner)\"", "String")
-            case "Int": return ("\(inner)", "Int")
-            case "Float": return ("\(inner)", "Float")
-            case "Bool": return ("\(inner)", "Bool")
-            case "Bytes":
-                if let arr = inner as? [Any] { return ("[\(arr.count) bytes]", "Bytes") }
-                return ("\(inner)", "Bytes")
-            case "Array":
-                if let arr = inner as? [Any] { return ("[\(arr.count) items]", "Array") }
-                return ("\(inner)", "Array")
-            case "Object":
-                if let obj = inner as? [String: Any] {
-                    if let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
-                       let str = String(data: data, encoding: .utf8) {
-                        return (str, "Object")
-                    }
-                    return ("{\(obj.count) keys}", "Object")
-                }
-                return ("\(inner)", "Object")
-            default: return ("\(inner)", tag)
-            }
-        }
-        // For Json primitive, value may be raw JSON
-        if let dict = value as? [String: Any],
-           let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]),
-           let str = String(data: data, encoding: .utf8) {
-            return (str, "JSON")
-        }
-        return ("\(value)", "?")
     }
 
     private func formatTimestamp(_ micros: UInt64) -> String {

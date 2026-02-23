@@ -2,6 +2,8 @@
 //  BranchesView.swift
 //  StrataFoundry
 //
+//  Thin view using BranchService — no raw JSON.
+//
 
 import SwiftUI
 
@@ -89,26 +91,20 @@ struct BranchesView: View {
     }
 
     private func loadBranches() async {
-        guard let client = appState.client else { return }
+        guard let services = appState.services else { return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
         do {
-            let json = try await client.executeRaw(#"{"BranchList": {}}"#)
-            guard let data = json.data(using: .utf8),
-                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let list = root["BranchInfoList"] as? [[String: Any]] else {
-                branches = []
-                return
-            }
-
-            branches = list.compactMap { item in
-                guard let info = item["info"] as? [String: Any],
-                      let branchId = info["id"] as? String else { return nil }
-                let status = info["status"] as? String ?? "unknown"
-                let parentId = info["parent_id"] as? String
-                return BranchEntry(id: branchId, name: branchId, status: status, parentId: parentId)
+            let list = try await services.branchService.list()
+            branches = list.map { item in
+                BranchEntry(
+                    id: item.info.id.value,
+                    name: item.info.id.value,
+                    status: item.info.status.rawValue,
+                    parentId: item.info.parentId?.value
+                )
             }
         } catch {
             errorMessage = error.localizedDescription

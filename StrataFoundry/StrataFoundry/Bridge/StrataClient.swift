@@ -1,9 +1,13 @@
 //
-//  StrataClient.swift
+//  StrataTransport.swift (was StrataClient.swift)
 //  StrataFoundry
 //
-//  High-level async Swift wrapper over the Rust FFI bridge.
+//  Raw async FFI wrapper over the Rust bridge.
 //  All FFI calls are dispatched off the main thread.
+//
+//  NOTE: This file retains its original filename for Xcode project compatibility.
+//  The class has been renamed to StrataTransport; the typed StrataClient
+//  lives in Services/StrataClient.swift.
 //
 
 import Foundation
@@ -91,9 +95,11 @@ private struct BridgeResponse {
     }
 }
 
-/// Async client for interacting with a Strata database via the Rust bridge.
+/// Raw async transport for interacting with a Strata database via the Rust FFI bridge.
+///
+/// This is the low-level wrapper. For typed command execution, use `StrataClient` instead.
 @Observable
-final class StrataClient: @unchecked Sendable {
+final class StrataTransport: @unchecked Sendable {
     /// The handle ID for the open database, or nil if not open.
     private(set) var handle: UInt64? = nil
 
@@ -197,3 +203,9 @@ final class StrataClient: @unchecked Sendable {
         }
     }
 }
+
+// MARK: - Backwards Compatibility
+
+/// Type alias so existing code that references `StrataClient` continues to compile
+/// during the incremental migration.
+typealias StrataClient = StrataTransport
