@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var showConfigSheet = false
     @State private var pendingDatabasePath: String?
     @State private var pendingIsCreate = false
+    @State private var showAdvanced = false
     @State private var configAccessMode = "read_write"
     @State private var configAutoEmbed = false
     @State private var configAutoEmbedEnabled = false
@@ -35,15 +36,9 @@ struct ContentView: View {
 
             // Active session content
             if let session = workspace.activeSession {
-                Group {
-                    if session.isOpen {
-                        DatabaseView()
-                    } else {
-                        WelcomeView()
-                    }
-                }
-                .environment(session.appState)
-                .id(session.id) // Force re-render when switching tabs
+                DatabaseView()
+                    .environment(session.appState)
+                    .id(session.id) // Force re-render when switching tabs
             } else {
                 Color.clear
             }
@@ -183,106 +178,104 @@ struct ContentView: View {
 
     @ViewBuilder
     private var openOptionsSheet: some View {
-        VStack(spacing: StrataSpacing.md) {
-            Text(pendingIsCreate ? "Configure New Database" : "Open Database Options")
-                .font(.headline)
-
-            Text(pendingDatabasePath.map { URL(fileURLWithPath: $0).deletingLastPathComponent().lastPathComponent } ?? "")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Divider()
-
-            // Access Mode
-            Picker("Access Mode", selection: $configAccessMode) {
-                Text("Read/Write").tag("read_write")
-                Text("Read Only").tag("read_only")
-            }
-            .pickerStyle(.segmented)
-
-            // Auto-Embed
-            HStack {
-                Toggle("Auto-Embed", isOn: $configAutoEmbedEnabled)
-                    .toggleStyle(.checkbox)
-                if configAutoEmbedEnabled {
-                    Toggle(configAutoEmbed ? "Enabled" : "Disabled", isOn: $configAutoEmbed)
-                        .toggleStyle(.switch)
+        Form {
+            Section {
+                LabeledContent("Path") {
+                    Text(pendingDatabasePath.map { URL(fileURLWithPath: $0).deletingLastPathComponent().lastPathComponent } ?? "")
+                        .font(.system(.body, design: .monospaced))
                 }
-                Spacer()
             }
 
-            // Durability
-            HStack {
-                Toggle("Durability", isOn: $configDurabilityEnabled)
-                    .toggleStyle(.checkbox)
-                if configDurabilityEnabled {
-                    Picker("", selection: $configDurability) {
-                        Text("Standard").tag("standard")
-                        Text("Always").tag("always")
+            DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
+                // Access Mode
+                Picker("Access Mode", selection: $configAccessMode) {
+                    Text("Read/Write").tag("read_write")
+                    Text("Read Only").tag("read_only")
+                }
+                .pickerStyle(.segmented)
+
+                // Auto-Embed
+                HStack {
+                    Toggle("Auto-Embed", isOn: $configAutoEmbedEnabled)
+                        .toggleStyle(.checkbox)
+                    if configAutoEmbedEnabled {
+                        Toggle(configAutoEmbed ? "Enabled" : "Disabled", isOn: $configAutoEmbed)
+                            .toggleStyle(.switch)
                     }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 200)
+                    Spacer()
                 }
-                Spacer()
-            }
 
-            // Model Configuration
-            GroupBox("Model Configuration (optional)") {
-                VStack(alignment: .leading, spacing: StrataSpacing.xs) {
-                    TextField("Model Endpoint (e.g. http://localhost:11434/v1)", text: $configModelEndpoint)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Model Name (e.g. qwen3:1.7b)", text: $configModelName)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("API Key (optional)", text: $configModelApiKey)
-                        .textFieldStyle(.roundedBorder)
-                    HStack(spacing: StrataSpacing.md) {
-                        HStack {
-                            Text("Timeout (ms)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            TextField("5000", text: $configModelTimeoutMs)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 80)
+                // Durability
+                HStack {
+                    Toggle("Durability", isOn: $configDurabilityEnabled)
+                        .toggleStyle(.checkbox)
+                    if configDurabilityEnabled {
+                        Picker("", selection: $configDurability) {
+                            Text("Standard").tag("standard")
+                            Text("Always").tag("always")
                         }
-                        HStack {
-                            Text("Batch Size")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            TextField("512", text: $configEmbedBatchSize)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 80)
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 200)
+                    }
+                    Spacer()
+                }
+
+                // Model Configuration
+                GroupBox("Model Configuration (optional)") {
+                    VStack(alignment: .leading, spacing: StrataSpacing.xs) {
+                        TextField("Model Endpoint (e.g. http://localhost:11434/v1)", text: $configModelEndpoint)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("Model Name (e.g. qwen3:1.7b)", text: $configModelName)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("API Key (optional)", text: $configModelApiKey)
+                            .textFieldStyle(.roundedBorder)
+                        HStack(spacing: StrataSpacing.md) {
+                            HStack {
+                                Text("Timeout (ms)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextField("5000", text: $configModelTimeoutMs)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 80)
+                            }
+                            HStack {
+                                Text("Batch Size")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextField("512", text: $configEmbedBatchSize)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 80)
+                            }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            Divider()
-
+        }
+        .formStyle(.grouped)
+        .frame(minWidth: 480, idealWidth: 500)
+        .safeAreaInset(edge: .bottom) {
             HStack {
-                Button("Use Defaults") {
-                    openWithDefaults()
-                }
-
-                Spacer()
-
                 Button("Cancel") {
                     showConfigSheet = false
                     pendingDatabasePath = nil
                 }
                 .keyboardShortcut(.cancelAction)
 
+                Spacer()
+
                 Button(pendingIsCreate ? "Create" : "Open") {
                     openWithConfig()
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
             }
+            .padding(StrataSpacing.lg)
         }
-        .padding(StrataSpacing.lg)
-        .frame(minWidth: 480, idealWidth: 500)
     }
 
     private func resetConfigForm() {
+        showAdvanced = false
         configAccessMode = "read_write"
         configAutoEmbed = false
         configAutoEmbedEnabled = false
@@ -309,20 +302,6 @@ struct ContentView: View {
         // Return nil if everything is default
         if opts.toJSON() == nil { return nil }
         return opts
-    }
-
-    private func openWithDefaults() {
-        guard let path = pendingDatabasePath else { return }
-        showConfigSheet = false
-        let ws = workspace
-        Task {
-            if pendingIsCreate {
-                await ws.createDatabase(at: path)
-            } else {
-                await ws.openDatabase(at: path)
-            }
-            pendingDatabasePath = nil
-        }
     }
 
     private func openWithConfig() {
