@@ -88,7 +88,7 @@ final class EventFeatureModel {
         }
     }
 
-    func batchImport(jsonText: String) async -> Result<String, String> {
+    func batchImport(jsonText: String) async -> BatchImportOutcome {
         guard let data = jsonText.data(using: .utf8),
               let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             return .failure("Invalid JSON: expected an array of {\"event_type\": \"...\", \"payload\": {...}} objects")

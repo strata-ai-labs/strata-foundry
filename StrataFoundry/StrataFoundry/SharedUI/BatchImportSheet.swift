@@ -8,6 +8,12 @@
 
 import SwiftUI
 
+/// Result type for batch import actions (avoids Result's Error constraint on Failure).
+enum BatchImportOutcome {
+    case success(String)
+    case failure(String)
+}
+
 /// A reusable sheet for batch importing data via JSON text input.
 ///
 /// The caller provides:
@@ -16,7 +22,7 @@ import SwiftUI
 struct BatchImportSheet: View {
     let title: String
     var placeholder: String = "Paste JSON array here..."
-    let action: (String) async -> Result<String, String>
+    let action: (String) async -> BatchImportOutcome
     let onDismiss: () -> Void
 
     @State private var jsonText = ""
