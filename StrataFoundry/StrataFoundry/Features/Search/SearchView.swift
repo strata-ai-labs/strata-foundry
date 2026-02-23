@@ -139,9 +139,7 @@ struct SearchView: View {
                 }
 
                 if let error = model.errorMessage {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .font(.callout)
+                    StrataErrorCallout(message: error)
                 }
 
                 // Results

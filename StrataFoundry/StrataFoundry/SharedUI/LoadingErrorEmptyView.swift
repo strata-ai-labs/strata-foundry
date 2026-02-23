@@ -36,14 +36,17 @@ struct LoadingErrorEmptyView<Content: View>: View {
             if isLoading {
                 SkeletonLoadingView()
             } else if let error = errorMessage {
-                VStack(spacing: StrataSpacing.xs) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.title2)
+                VStack(spacing: StrataSpacing.sm) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 36))
                         .foregroundStyle(.red)
+                    Text("Something went wrong")
+                        .font(.headline)
                     Text(error)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(.secondary)
                         .font(.callout)
                         .multilineTextAlignment(.center)
+                        .frame(maxWidth: 400)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding()

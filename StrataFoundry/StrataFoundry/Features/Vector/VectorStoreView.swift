@@ -22,7 +22,7 @@ struct VectorStoreView: View {
         .navigationTitle("Vector Store")
         .navigationSubtitle(model.map { "\($0.collections.count) collections" } ?? "")
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
+            ToolbarItem(placement: .primaryAction) {
                 Button {
                     model?.formName = ""
                     model?.formDimension = "384"
@@ -33,14 +33,6 @@ struct VectorStoreView: View {
                 }
                 .help("Create Collection")
                 .disabled(model?.isTimeTraveling ?? true)
-
-                Button {
-                    model?.showDeleteConfirm = true
-                } label: {
-                    Label("Drop Collection", systemImage: "trash")
-                }
-                .help("Drop Collection")
-                .disabled(model?.isTimeTraveling ?? true || model?.selectedCollection == nil)
             }
 
             ToolbarItem(placement: .automatic) {
@@ -50,6 +42,21 @@ struct VectorStoreView: View {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .help("Refresh")
+            }
+
+            if model?.selectedCollection != nil {
+                ToolbarItem(placement: .principal) {
+                    Picker("Mode", selection: Binding(
+                        get: { model?.paneMode ?? .lookup },
+                        set: { model?.paneMode = $0 }
+                    )) {
+                        ForEach(VectorPaneMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 320)
+                }
             }
         }
         .task(id: appState.reloadToken) {
@@ -151,20 +158,6 @@ struct VectorStoreView: View {
                     statsBanner(stats)
                     Divider()
                 }
-
-                Picker("Mode", selection: Binding(
-                    get: { model.paneMode },
-                    set: { model.paneMode = $0 }
-                )) {
-                    ForEach(VectorPaneMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, StrataSpacing.md)
-                .padding(.vertical, StrataSpacing.xs)
-
-                Divider()
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: StrataSpacing.sm) {
@@ -285,44 +278,52 @@ struct VectorStoreView: View {
                 .font(.callout)
         }
 
-        TextField("Key", text: Binding(
-            get: { model.upsertKey },
-            set: { model.upsertKey = $0 }
-        ))
-        .textFieldStyle(.roundedBorder)
-        .disabled(model.isTimeTraveling)
+        GroupBox("Vector") {
+            VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                TextField("Key", text: Binding(
+                    get: { model.upsertKey },
+                    set: { model.upsertKey = $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .disabled(model.isTimeTraveling)
 
-        Text("Embedding (JSON array of floats)")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        TextEditor(text: Binding(
-            get: { model.upsertVector },
-            set: { model.upsertVector = $0 }
-        ))
-        .font(.system(.body, design: .monospaced))
-        .frame(minHeight: 80)
-        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
-        .disabled(model.isTimeTraveling)
-
-        if let stats = model.collectionStats, !model.upsertVector.isEmpty {
-            if let parsed = model.parseFloatArray(model.upsertVector), parsed.count != stats.dimension {
-                Text("Warning: expected \(stats.dimension) dimensions, got \(parsed.count)")
-                    .foregroundStyle(.orange)
+                Text("Embedding (JSON array of floats)")
                     .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: Binding(
+                    get: { model.upsertVector },
+                    set: { model.upsertVector = $0 }
+                ))
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 80)
+                .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
+                .disabled(model.isTimeTraveling)
+
+                if let stats = model.collectionStats, !model.upsertVector.isEmpty {
+                    if let parsed = model.parseFloatArray(model.upsertVector), parsed.count != stats.dimension {
+                        Text("Warning: expected \(stats.dimension) dimensions, got \(parsed.count)")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                    }
+                }
             }
         }
 
-        Text("Metadata (optional JSON object)")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        TextEditor(text: Binding(
-            get: { model.upsertMetadata },
-            set: { model.upsertMetadata = $0 }
-        ))
-        .font(.system(.body, design: .monospaced))
-        .frame(minHeight: 60)
-        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
-        .disabled(model.isTimeTraveling)
+        GroupBox("Metadata") {
+            VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                Text("Metadata (optional JSON object)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: Binding(
+                    get: { model.upsertMetadata },
+                    set: { model.upsertMetadata = $0 }
+                ))
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 60)
+                .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
+                .disabled(model.isTimeTraveling)
+            }
+        }
 
         Button("Upsert") {
             Task { await model.vectorUpsert() }
@@ -330,10 +331,10 @@ struct VectorStoreView: View {
         .disabled(model.isTimeTraveling || model.upsertKey.isEmpty || model.upsertVector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         if let success = model.upsertSuccess {
-            Text(success).foregroundStyle(.green).font(.callout)
+            StrataSuccessCallout(message: success)
         }
         if let error = model.upsertError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
     }
 
@@ -341,39 +342,47 @@ struct VectorStoreView: View {
 
     @ViewBuilder
     private func searchModeView(_ model: VectorFeatureModel) -> some View {
-        Text("Query vector (JSON array of floats)")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        TextEditor(text: Binding(
-            get: { model.searchQuery },
-            set: { model.searchQuery = $0 }
-        ))
-        .font(.system(.body, design: .monospaced))
-        .frame(minHeight: 80)
-        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
+        GroupBox("Query") {
+            VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                Text("Query vector (JSON array of floats)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: Binding(
+                    get: { model.searchQuery },
+                    set: { model.searchQuery = $0 }
+                ))
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 80)
+                .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
 
-        HStack {
-            Text("k")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            TextField("10", text: Binding(
-                get: { model.searchK },
-                set: { model.searchK = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 60)
+                HStack {
+                    Text("k")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("10", text: Binding(
+                        get: { model.searchK },
+                        set: { model.searchK = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 60)
+                }
+            }
         }
 
-        Text("Filters (optional JSON array)")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        TextEditor(text: Binding(
-            get: { model.searchFilter },
-            set: { model.searchFilter = $0 }
-        ))
-        .font(.system(.body, design: .monospaced))
-        .frame(minHeight: 60)
-        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
+        GroupBox("Filters") {
+            VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                Text("Filters (optional JSON array)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: Binding(
+                    get: { model.searchFilter },
+                    set: { model.searchFilter = $0 }
+                ))
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 60)
+                .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
+            }
+        }
 
         Button("Search") {
             Task { await model.vectorSearch() }
@@ -386,7 +395,7 @@ struct VectorStoreView: View {
         }
 
         if let error = model.searchError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
 
         if !model.searchResults.isEmpty {
@@ -459,10 +468,10 @@ struct VectorStoreView: View {
         .disabled(model.isTimeTraveling || model.batchUpsertJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         if let success = model.batchUpsertSuccess {
-            Text(success).foregroundStyle(.green).font(.callout)
+            StrataSuccessCallout(message: success)
         }
         if let error = model.batchUpsertError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
     }
 
@@ -470,32 +479,33 @@ struct VectorStoreView: View {
 
     @ViewBuilder
     private func createCollectionSheet(_ model: VectorFeatureModel) -> some View {
-        VStack(spacing: StrataSpacing.md) {
-            Text("Create Collection")
-                .font(.headline)
-
-            TextField("Collection Name", text: Binding(
-                get: { model.formName },
-                set: { model.formName = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-
-            TextField("Dimension", text: Binding(
-                get: { model.formDimension },
-                set: { model.formDimension = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-
-            Picker("Distance Metric", selection: Binding(
-                get: { model.formMetric },
-                set: { model.formMetric = $0 }
-            )) {
-                Text("Cosine").tag("Cosine")
-                Text("Euclidean").tag("Euclidean")
-                Text("DotProduct").tag("DotProduct")
+        Form {
+            Section("Collection") {
+                TextField("Collection Name", text: Binding(
+                    get: { model.formName },
+                    set: { model.formName = $0 }
+                ))
+                TextField("Dimension", text: Binding(
+                    get: { model.formDimension },
+                    set: { model.formDimension = $0 }
+                ))
             }
-            .pickerStyle(.segmented)
-
+            Section("Distance Metric") {
+                Picker("Distance Metric", selection: Binding(
+                    get: { model.formMetric },
+                    set: { model.formMetric = $0 }
+                )) {
+                    Text("Cosine").tag("Cosine")
+                    Text("Euclidean").tag("Euclidean")
+                    Text("DotProduct").tag("DotProduct")
+                }
+                .pickerStyle(.segmented)
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Create Collection")
+        .frame(minWidth: StrataLayout.sheetMinWidth)
+        .safeAreaInset(edge: .bottom) {
             HStack {
                 Button("Cancel") {
                     model.showCreateSheet = false
@@ -508,10 +518,10 @@ struct VectorStoreView: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
                 .disabled(model.formName.isEmpty || Int(model.formDimension) == nil)
             }
+            .padding(StrataSpacing.lg)
         }
-        .padding(StrataSpacing.lg)
-        .frame(minWidth: StrataLayout.sheetMinWidth)
     }
 }

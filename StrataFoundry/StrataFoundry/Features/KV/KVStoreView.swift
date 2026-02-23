@@ -29,45 +29,25 @@ struct KVStoreView: View {
 
     @ToolbarContentBuilder
     private var kvToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button {
-                model?.showAddSheet = true
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                Button {
+                    model?.showAddSheet = true
+                } label: {
+                    Label("Add Key", systemImage: "plus")
+                }
+                Button {
+                    model?.showBatchSheet = true
+                } label: {
+                    Label("Batch Import", systemImage: "square.and.arrow.down.on.square")
+                }
             } label: {
                 Label("Add Key", systemImage: "plus")
+            } primaryAction: {
+                model?.showAddSheet = true
             }
             .help("Add Key")
             .disabled(model?.isTimeTraveling ?? true)
-
-            Button {
-                model?.showBatchSheet = true
-            } label: {
-                Label("Batch Import", systemImage: "square.and.arrow.down.on.square")
-            }
-            .help("Batch Import")
-            .disabled(model?.isTimeTraveling ?? true)
-        }
-
-        ToolbarItem(placement: .automatic) {
-            Button {
-                if let entry = model?.selectedEntry {
-                    model?.entryToDelete = entry
-                    model?.showDeleteConfirm = true
-                }
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            .help("Delete Key")
-            .disabled(model?.isTimeTraveling ?? true || model?.selectedEntry == nil)
-        }
-
-        ToolbarItem(placement: .automatic) {
-            Button {
-                withAnimation { model?.showInspector.toggle() }
-            } label: {
-                Label("Inspector", systemImage: "sidebar.trailing")
-            }
-            .help("Toggle Inspector (⌘⌃I)")
-            .keyboardShortcut("i", modifiers: [.command, .control])
         }
 
         ToolbarItem(placement: .automatic) {
@@ -86,6 +66,11 @@ struct KVStoreView: View {
             .navigationSubtitle(model.map { "\($0.filteredEntries.count) keys" } ?? "")
             .searchable(text: filterBinding, prompt: "Filter keys...")
             .toolbar { kvToolbar }
+            .background {
+                Button("") { withAnimation { model?.showInspector.toggle() } }
+                    .keyboardShortcut("i", modifiers: [.command, .control])
+                    .hidden()
+            }
             .task(id: appState.reloadToken) {
                 if model == nil, let services = appState.services {
                     model = KVFeatureModel(kvService: services.kvService, appState: appState)
@@ -288,28 +273,31 @@ struct KVStoreView: View {
 
     @ViewBuilder
     private func kvFormSheet(model: KVFeatureModel, isEditing: Bool) -> some View {
-        VStack(spacing: StrataSpacing.md) {
-            Text(isEditing ? "Edit Key" : "Add Key")
-                .font(.headline)
-
-            TextField("Key", text: Binding(
-                get: { model.formKey },
-                set: { model.formKey = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            .disabled(isEditing)
-
-            StrataValueEditor(
-                valueText: Binding(
-                    get: { model.formValue },
-                    set: { model.formValue = $0 }
-                ),
-                valueType: Binding(
-                    get: { model.formValueType },
-                    set: { model.formValueType = $0 }
+        Form {
+            Section("Key") {
+                TextField("Key", text: Binding(
+                    get: { model.formKey },
+                    set: { model.formKey = $0 }
+                ))
+                .disabled(isEditing)
+            }
+            Section("Value") {
+                StrataValueEditor(
+                    valueText: Binding(
+                        get: { model.formValue },
+                        set: { model.formValue = $0 }
+                    ),
+                    valueType: Binding(
+                        get: { model.formValueType },
+                        set: { model.formValueType = $0 }
+                    )
                 )
-            )
-
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(isEditing ? "Edit Key" : "Add Key")
+        .frame(minWidth: StrataLayout.sheetMinWidth)
+        .safeAreaInset(edge: .bottom) {
             HStack {
                 Button("Cancel") {
                     model.showAddSheet = false
@@ -323,10 +311,10 @@ struct KVStoreView: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
                 .disabled(model.formKey.isEmpty)
             }
+            .padding(StrataSpacing.lg)
         }
-        .padding(StrataSpacing.lg)
-        .frame(minWidth: StrataLayout.sheetMinWidth)
     }
 }

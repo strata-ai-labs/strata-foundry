@@ -25,6 +25,19 @@ struct ModelsView: View {
         .navigationTitle("Models & Intelligence")
         .navigationSubtitle(model.map { "\($0.registryModels.count) registry, \($0.localModels.count) local" } ?? "")
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Mode", selection: Binding(
+                    get: { model?.modelsMode ?? .embed },
+                    set: { model?.modelsMode = $0 }
+                )) {
+                    ForEach(ModelsPaneMode.allCases, id: \.self) { m in
+                        Text(m.rawValue).tag(m)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 320)
+            }
+
             ToolbarItem(placement: .automatic) {
                 Button {
                     Task { await model?.loadModels() }
@@ -51,7 +64,7 @@ struct ModelsView: View {
         } else if let error = model.errorMessage {
             VStack {
                 Spacer()
-                Text(error).foregroundStyle(.red).padding()
+                StrataErrorCallout(message: error)
                 Spacer()
             }
         } else {
@@ -148,29 +161,10 @@ struct ModelsView: View {
                 .padding(.vertical, StrataSpacing.xs)
             }
             if let msg = model.pullMessage {
-                HStack {
-                    Text(msg)
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                    Spacer()
-                }
-                .padding(.horizontal, StrataSpacing.md)
-                .padding(.vertical, StrataSpacing.xs)
+                StrataSuccessCallout(message: msg)
+                    .padding(.horizontal, StrataSpacing.md)
+                    .padding(.vertical, StrataSpacing.xs)
             }
-
-            Picker("Mode", selection: Binding(
-                get: { model.modelsMode },
-                set: { model.modelsMode = $0 }
-            )) {
-                ForEach(ModelsPaneMode.allCases, id: \.self) { m in
-                    Text(m.rawValue).tag(m)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, StrataSpacing.md)
-            .padding(.vertical, StrataSpacing.xs)
-
-            Divider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: StrataSpacing.sm) {
@@ -209,7 +203,7 @@ struct ModelsView: View {
         .disabled(model.embedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         if let error = model.embedError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
         if let result = model.embedResult {
             GroupBox("Embedding") {
@@ -243,7 +237,7 @@ struct ModelsView: View {
         .disabled(model.embedBatchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         if let error = model.embedBatchError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
         if let result = model.embedBatchResult {
             GroupBox("Batch Embeddings") {
@@ -292,10 +286,10 @@ struct ModelsView: View {
         }
 
         if let msg = model.configMessage {
-            Text(msg).foregroundStyle(.green).font(.callout)
+            StrataSuccessCallout(message: msg)
         }
         if let error = model.configError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
     }
 
@@ -311,7 +305,7 @@ struct ModelsView: View {
         }
 
         if let error = model.embedStatusError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
         if let status = model.embedStatus {
             GroupBox("Status") {

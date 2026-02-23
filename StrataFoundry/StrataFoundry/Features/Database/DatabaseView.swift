@@ -28,6 +28,17 @@ enum Primitive: String, CaseIterable, Identifiable, Hashable {
         case .graph: return "circle.hexagongrid"
         }
     }
+
+    var iconColor: Color {
+        switch self {
+        case .kv: return .blue
+        case .state: return .purple
+        case .events: return .orange
+        case .json: return .green
+        case .vectors: return .pink
+        case .graph: return .teal
+        }
+    }
 }
 
 enum TopLevelItem: String, CaseIterable, Identifiable, Hashable {
@@ -44,6 +55,15 @@ enum TopLevelItem: String, CaseIterable, Identifiable, Hashable {
         case .models: return "cpu"
         case .generation: return "text.bubble"
         case .admin: return "gearshape.2"
+        }
+    }
+
+    var iconColor: Color {
+        switch self {
+        case .search: return .blue
+        case .models: return .indigo
+        case .generation: return .green
+        case .admin: return .gray
         }
     }
 }
@@ -99,23 +119,42 @@ struct DatabaseView: View {
         @Bindable var appState = appState
         NavigationSplitView {
             List(selection: $selection) {
-                Label("Database Info", systemImage: "info.circle")
-                    .tag(SidebarSelection.info)
+                Label {
+                    Text("Database Info")
+                } icon: {
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.blue)
+                }
+                .tag(SidebarSelection.info)
 
                 ForEach(appState.spaces, id: \.self) { space in
-                    Section(space) {
+                    Section {
                         ForEach(Primitive.allCases) { prim in
-                            Label(prim.rawValue, systemImage: prim.icon)
-                                .tag(SidebarSelection.primitive(space: space, primitive: prim))
+                            Label {
+                                Text(prim.rawValue)
+                            } icon: {
+                                Image(systemName: prim.icon)
+                                    .foregroundStyle(prim.iconColor)
+                            }
+                            .tag(SidebarSelection.primitive(space: space, primitive: prim))
                         }
+                    } header: {
+                        Label(space, systemImage: "square.stack.3d.up")
                     }
                 }
 
-                Section("Tools") {
+                Section {
                     ForEach(TopLevelItem.allCases) { item in
-                        Label(item.rawValue, systemImage: item.icon)
-                            .tag(SidebarSelection.topLevel(item))
+                        Label {
+                            Text(item.rawValue)
+                        } icon: {
+                            Image(systemName: item.icon)
+                                .foregroundStyle(item.iconColor)
+                        }
+                        .tag(SidebarSelection.topLevel(item))
                     }
+                } header: {
+                    Label("Tools", systemImage: "wrench.and.screwdriver")
                 }
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: StrataLayout.sidebarIdealWidth)
@@ -145,21 +184,24 @@ struct DatabaseView: View {
                 .padding(.vertical, 8)
             }
             .sheet(isPresented: $showCreateSpaceSheet) {
-                VStack(spacing: 12) {
-                    Text("New Space").font(.headline)
-                    TextField("Space name", text: $newSpaceName)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(minWidth: 200)
-                    if let spaceError {
-                        Text(spaceError)
-                            .foregroundStyle(.red)
-                            .font(.caption)
+                Form {
+                    Section("Space") {
+                        TextField("Space name", text: $newSpaceName)
                     }
+                    if let spaceError {
+                        StrataErrorCallout(message: spaceError)
+                    }
+                }
+                .formStyle(.grouped)
+                .navigationTitle("New Space")
+                .frame(minWidth: StrataLayout.sheetMinWidth)
+                .safeAreaInset(edge: .bottom) {
                     HStack {
                         Button("Cancel") {
                             showCreateSpaceSheet = false
                         }
                         .keyboardShortcut(.cancelAction)
+                        Spacer()
                         Button("Create") {
                             Task {
                                 do {
@@ -171,10 +213,11 @@ struct DatabaseView: View {
                             }
                         }
                         .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
                         .disabled(newSpaceName.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
+                    .padding(StrataSpacing.lg)
                 }
-                .padding()
             }
             .alert("Delete Space", isPresented: $showDeleteSpaceConfirm) {
                 Button("Cancel", role: .cancel) { }
@@ -193,34 +236,36 @@ struct DatabaseView: View {
                 Text("Are you sure you want to delete the space \"\(appState.selectedSpace)\"? This cannot be undone.")
             }
         } detail: {
-            switch selection {
-            case .info, nil:
-                DatabaseInfoView()
-            case .primitive(_, let prim):
-                switch prim {
-                case .kv:
-                    KVStoreView()
-                case .state:
-                    StateCellsView()
-                case .events:
-                    EventLogView()
-                case .json:
-                    JsonStoreView()
-                case .vectors:
-                    VectorStoreView()
-                case .graph:
-                    GraphView()
-                }
-            case .topLevel(let item):
-                switch item {
-                case .search:
-                    SearchView()
-                case .models:
-                    ModelsView()
-                case .generation:
-                    GenerationView()
-                case .admin:
-                    AdminView()
+            NavigationStack {
+                switch selection {
+                case .info, nil:
+                    DatabaseInfoView()
+                case .primitive(_, let prim):
+                    switch prim {
+                    case .kv:
+                        KVStoreView()
+                    case .state:
+                        StateCellsView()
+                    case .events:
+                        EventLogView()
+                    case .json:
+                        JsonStoreView()
+                    case .vectors:
+                        VectorStoreView()
+                    case .graph:
+                        GraphView()
+                    }
+                case .topLevel(let item):
+                    switch item {
+                    case .search:
+                        SearchView()
+                    case .models:
+                        ModelsView()
+                    case .generation:
+                        GenerationView()
+                    case .admin:
+                        AdminView()
+                    }
                 }
             }
         }
@@ -235,88 +280,77 @@ struct DatabaseView: View {
             }
 
             ToolbarItem(placement: .automatic) {
-                Button {
-                    newBranchName = ""
-                    branchError = nil
-                    showCreateBranchSheet = true
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .help("Create branch")
-                .disabled(appState.timeTravelDate != nil)
-            }
+                Menu {
+                    Section("Branch") {
+                        Button {
+                            newBranchName = ""
+                            branchError = nil
+                            showCreateBranchSheet = true
+                        } label: {
+                            Label("New Branch", systemImage: "plus")
+                        }
+                        .disabled(appState.timeTravelDate != nil)
 
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    showDeleteBranchConfirm = true
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .help("Delete branch")
-                .disabled(appState.selectedBranch == "default" || appState.timeTravelDate != nil)
-            }
+                        Button {
+                            forkDestination = ""
+                            forkError = nil
+                            showForkSheet = true
+                        } label: {
+                            Label("Fork Branch", systemImage: "arrow.triangle.branch")
+                        }
+                        .disabled(appState.timeTravelDate != nil)
 
-            // Branch Fork
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    forkDestination = ""
-                    forkError = nil
-                    showForkSheet = true
-                } label: {
-                    Image(systemName: "arrow.triangle.branch")
-                }
-                .help("Fork branch")
-                .disabled(appState.timeTravelDate != nil)
-            }
+                        Button(role: .destructive) {
+                            showDeleteBranchConfirm = true
+                        } label: {
+                            Label("Delete Branch", systemImage: "trash")
+                        }
+                        .disabled(appState.selectedBranch == "default" || appState.timeTravelDate != nil)
+                    }
 
-            // Branch Diff
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    diffBranchA = appState.selectedBranch
-                    diffBranchB = appState.branches.first(where: { $0 != appState.selectedBranch }) ?? "default"
-                    diffResult = nil
-                    diffError = nil
-                    showDiffSheet = true
-                } label: {
-                    Image(systemName: "arrow.left.arrow.right")
-                }
-                .help("Diff branches")
-            }
+                    Section("Compare & Merge") {
+                        Button {
+                            diffBranchA = appState.selectedBranch
+                            diffBranchB = appState.branches.first(where: { $0 != appState.selectedBranch }) ?? "default"
+                            diffResult = nil
+                            diffError = nil
+                            showDiffSheet = true
+                        } label: {
+                            Label("Diff Branches", systemImage: "arrow.left.arrow.right")
+                        }
 
-            // Branch Merge
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    mergeSource = appState.selectedBranch
-                    mergeTarget = appState.branches.first(where: { $0 != appState.selectedBranch }) ?? "default"
-                    mergeStrategy = "source_wins"
-                    mergeError = nil
-                    mergeResult = nil
-                    showMergeSheet = true
-                } label: {
-                    Image(systemName: "arrow.triangle.merge")
-                }
-                .help("Merge branches")
-                .disabled(appState.timeTravelDate != nil || appState.branches.count < 2)
-            }
+                        Button {
+                            mergeSource = appState.selectedBranch
+                            mergeTarget = appState.branches.first(where: { $0 != appState.selectedBranch }) ?? "default"
+                            mergeStrategy = "source_wins"
+                            mergeError = nil
+                            mergeResult = nil
+                            showMergeSheet = true
+                        } label: {
+                            Label("Merge Branches", systemImage: "arrow.triangle.merge")
+                        }
+                        .disabled(appState.timeTravelDate != nil || appState.branches.count < 2)
+                    }
 
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    exportBranchPanel()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                .help("Export branch")
-                .disabled(appState.timeTravelDate != nil || isBranchOperationInProgress)
-            }
+                    Section("Import / Export") {
+                        Button {
+                            exportBranchPanel()
+                        } label: {
+                            Label("Export Branch", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(appState.timeTravelDate != nil || isBranchOperationInProgress)
 
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    importBranchPanel()
+                        Button {
+                            importBranchPanel()
+                        } label: {
+                            Label("Import Branch", systemImage: "square.and.arrow.down")
+                        }
+                        .disabled(appState.timeTravelDate != nil || isBranchOperationInProgress)
+                    }
                 } label: {
-                    Image(systemName: "square.and.arrow.down")
+                    Label("Branch Actions", systemImage: "ellipsis.circle")
                 }
-                .help("Import branch")
-                .disabled(appState.timeTravelDate != nil || isBranchOperationInProgress)
+                .help("Branch actions")
             }
 
             ToolbarItem(placement: .automatic) {
@@ -367,21 +401,24 @@ struct DatabaseView: View {
             Task { await appState.loadSpaces() }
         }
         .sheet(isPresented: $showCreateBranchSheet) {
-            VStack(spacing: 12) {
-                Text("New Branch").font(.headline)
-                TextField("Branch name", text: $newBranchName)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 200)
-                if let branchError {
-                    Text(branchError)
-                        .foregroundStyle(.red)
-                        .font(.caption)
+            Form {
+                Section("Branch") {
+                    TextField("Branch name", text: $newBranchName)
                 }
+                if let branchError {
+                    StrataErrorCallout(message: branchError)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("New Branch")
+            .frame(minWidth: StrataLayout.sheetMinWidth)
+            .safeAreaInset(edge: .bottom) {
                 HStack {
                     Button("Cancel") {
                         showCreateBranchSheet = false
                     }
                     .keyboardShortcut(.cancelAction)
+                    Spacer()
                     Button("Create") {
                         Task {
                             do {
@@ -393,10 +430,11 @@ struct DatabaseView: View {
                         }
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(newBranchName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
+                .padding(StrataSpacing.lg)
             }
-            .padding()
         }
         .alert("Delete Branch", isPresented: $showDeleteBranchConfirm) {
             Button("Cancel", role: .cancel) { }
@@ -416,20 +454,22 @@ struct DatabaseView: View {
         }
         // Fork sheet
         .sheet(isPresented: $showForkSheet) {
-            VStack(spacing: 16) {
-                Text("Fork Branch").font(.headline)
-                LabeledContent("Source") {
-                    Text(appState.selectedBranch)
-                        .font(.system(.body, design: .monospaced))
+            Form {
+                Section("Fork") {
+                    LabeledContent("Source") {
+                        Text(appState.selectedBranch)
+                            .font(.system(.body, design: .monospaced))
+                    }
+                    TextField("Destination branch name", text: $forkDestination)
                 }
-                TextField("Destination branch name", text: $forkDestination)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 250)
                 if let forkError {
-                    Text(forkError)
-                        .foregroundStyle(.red)
-                        .font(.caption)
+                    StrataErrorCallout(message: forkError)
                 }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Fork Branch")
+            .frame(minWidth: StrataLayout.sheetMinWidth)
+            .safeAreaInset(edge: .bottom) {
                 HStack {
                     Button("Cancel") {
                         showForkSheet = false
@@ -450,26 +490,46 @@ struct DatabaseView: View {
                         }
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(forkDestination.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
+                .padding(StrataSpacing.lg)
             }
-            .padding(20)
-            .frame(minWidth: 350)
         }
         // Diff sheet
         .sheet(isPresented: $showDiffSheet) {
-            VStack(spacing: 16) {
-                Text("Diff Branches").font(.headline)
-                Picker("Branch A", selection: $diffBranchA) {
-                    ForEach(appState.branches, id: \.self) { b in
-                        Text(b).tag(b)
+            Form {
+                Section("Branches") {
+                    Picker("Branch A", selection: $diffBranchA) {
+                        ForEach(appState.branches, id: \.self) { b in
+                            Text(b).tag(b)
+                        }
+                    }
+                    Picker("Branch B", selection: $diffBranchB) {
+                        ForEach(appState.branches, id: \.self) { b in
+                            Text(b).tag(b)
+                        }
                     }
                 }
-                Picker("Branch B", selection: $diffBranchB) {
-                    ForEach(appState.branches, id: \.self) { b in
-                        Text(b).tag(b)
+                if let diffError {
+                    StrataErrorCallout(message: diffError)
+                }
+                if let diffResult {
+                    Section("Diff Result") {
+                        ScrollView {
+                            Text(diffResult)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 300)
                     }
                 }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Diff Branches")
+            .frame(minWidth: StrataLayout.sheetWideMinWidth, minHeight: 300)
+            .safeAreaInset(edge: .bottom) {
                 HStack {
                     Button("Cancel") {
                         showDiffSheet = false
@@ -489,57 +549,45 @@ struct DatabaseView: View {
                         }
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(diffBranchA == diffBranchB)
                 }
-                if let diffError {
-                    Text(diffError)
-                        .foregroundStyle(.red)
-                        .font(.caption)
-                }
-                if let diffResult {
-                    GroupBox("Diff Result") {
-                        ScrollView {
-                            Text(diffResult)
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(maxHeight: 300)
-                    }
-                }
+                .padding(StrataSpacing.lg)
             }
-            .padding(20)
-            .frame(minWidth: 500, minHeight: 300)
         }
         // Merge sheet
         .sheet(isPresented: $showMergeSheet) {
-            VStack(spacing: 16) {
-                Text("Merge Branches").font(.headline)
-                Picker("Source", selection: $mergeSource) {
-                    ForEach(appState.branches, id: \.self) { b in
-                        Text(b).tag(b)
+            Form {
+                Section("Branches") {
+                    Picker("Source", selection: $mergeSource) {
+                        ForEach(appState.branches, id: \.self) { b in
+                            Text(b).tag(b)
+                        }
+                    }
+                    Picker("Target", selection: $mergeTarget) {
+                        ForEach(appState.branches, id: \.self) { b in
+                            Text(b).tag(b)
+                        }
                     }
                 }
-                Picker("Target", selection: $mergeTarget) {
-                    ForEach(appState.branches, id: \.self) { b in
-                        Text(b).tag(b)
+                Section("Strategy") {
+                    Picker("Strategy", selection: $mergeStrategy) {
+                        Text("Source Wins").tag("source_wins")
+                        Text("Target Wins").tag("target_wins")
                     }
+                    .pickerStyle(.segmented)
                 }
-                Picker("Strategy", selection: $mergeStrategy) {
-                    Text("Source Wins").tag("source_wins")
-                    Text("Target Wins").tag("target_wins")
-                }
-                .pickerStyle(.segmented)
                 if let mergeError {
-                    Text(mergeError)
-                        .foregroundStyle(.red)
-                        .font(.caption)
+                    StrataErrorCallout(message: mergeError)
                 }
                 if let mergeResult {
-                    Text(mergeResult)
-                        .foregroundStyle(.green)
-                        .font(.callout)
+                    StrataSuccessCallout(message: mergeResult)
                 }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Merge Branches")
+            .frame(minWidth: StrataLayout.sheetMinWidth)
+            .safeAreaInset(edge: .bottom) {
                 HStack {
                     Button("Cancel") {
                         showMergeSheet = false
@@ -560,11 +608,11 @@ struct DatabaseView: View {
                         }
                     }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(mergeSource == mergeTarget)
                 }
+                .padding(StrataSpacing.lg)
             }
-            .padding(20)
-            .frame(minWidth: 400)
         }
         .alert("Branch Exported",
                isPresented: Binding(

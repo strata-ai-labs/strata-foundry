@@ -29,32 +29,25 @@ struct EventLogView: View {
 
     @ToolbarContentBuilder
     private var eventToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button {
-                model?.showAppendSheet = true
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                Button {
+                    model?.showAppendSheet = true
+                } label: {
+                    Label("Append Event", systemImage: "plus")
+                }
+                Button {
+                    model?.showBatchSheet = true
+                } label: {
+                    Label("Batch Append", systemImage: "square.and.arrow.down.on.square")
+                }
             } label: {
                 Label("Append Event", systemImage: "plus")
+            } primaryAction: {
+                model?.showAppendSheet = true
             }
             .help("Append Event")
             .disabled(model?.isTimeTraveling ?? true)
-
-            Button {
-                model?.showBatchSheet = true
-            } label: {
-                Label("Batch Append", systemImage: "square.and.arrow.down.on.square")
-            }
-            .help("Batch Append")
-            .disabled(model?.isTimeTraveling ?? true)
-        }
-
-        ToolbarItem(placement: .automatic) {
-            Button {
-                withAnimation { model?.showInspector.toggle() }
-            } label: {
-                Label("Inspector", systemImage: "sidebar.trailing")
-            }
-            .help("Toggle Inspector (⌘⌃I)")
-            .keyboardShortcut("i", modifiers: [.command, .control])
         }
 
         ToolbarItem(placement: .automatic) {
@@ -73,6 +66,11 @@ struct EventLogView: View {
             .navigationSubtitle(model.map { "\($0.eventCount) events" } ?? "")
             .searchable(text: filterBinding, prompt: "Filter by event type...")
             .toolbar { eventToolbar }
+            .background {
+                Button("") { withAnimation { model?.showInspector.toggle() } }
+                    .keyboardShortcut("i", modifiers: [.command, .control])
+                    .hidden()
+            }
             .task(id: appState.reloadToken) {
                 if model == nil, let services = appState.services {
                     model = EventFeatureModel(eventService: services.eventService, appState: appState)
@@ -208,31 +206,26 @@ struct EventLogView: View {
 
     @ViewBuilder
     private func appendFormSheet(model: EventFeatureModel) -> some View {
-        VStack(spacing: StrataSpacing.md) {
-            Text("Append Event")
-                .font(.headline)
-
-            TextField("Event Type", text: Binding(
-                get: { model.formEventType },
-                set: { model.formEventType = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-
-            Text("Payload (Strata Value JSON)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            TextEditor(text: Binding(
-                get: { model.formPayload },
-                set: { model.formPayload = $0 }
-            ))
-            .font(.system(.body, design: .monospaced))
-            .frame(minHeight: 100)
-            .overlay(
-                RoundedRectangle(cornerRadius: StrataRadius.md)
-                    .stroke(.separator, lineWidth: 1)
-            )
-
+        Form {
+            Section("Event") {
+                TextField("Event Type", text: Binding(
+                    get: { model.formEventType },
+                    set: { model.formEventType = $0 }
+                ))
+            }
+            Section("Payload (Strata Value JSON)") {
+                TextEditor(text: Binding(
+                    get: { model.formPayload },
+                    set: { model.formPayload = $0 }
+                ))
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 100)
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Append Event")
+        .frame(minWidth: StrataLayout.sheetMinWidth)
+        .safeAreaInset(edge: .bottom) {
             HStack {
                 Button("Cancel") {
                     model.showAppendSheet = false
@@ -245,11 +238,11 @@ struct EventLogView: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
                 .disabled(model.formEventType.isEmpty)
             }
+            .padding(StrataSpacing.lg)
         }
-        .padding(StrataSpacing.lg)
-        .frame(minWidth: StrataLayout.sheetMinWidth)
     }
 
     // MARK: - Helpers

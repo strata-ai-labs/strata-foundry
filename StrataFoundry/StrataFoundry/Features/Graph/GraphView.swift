@@ -24,7 +24,7 @@ struct GraphView: View {
         .navigationTitle("Graph Explorer")
         .navigationSubtitle(model.map { "\($0.graphs.count) graphs" } ?? "")
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
+            ToolbarItem(placement: .primaryAction) {
                 Button {
                     model?.formGraphName = ""
                     model?.formCascadePolicy = "none"
@@ -34,14 +34,6 @@ struct GraphView: View {
                 }
                 .help("Create Graph")
                 .disabled(model?.isTimeTraveling ?? true)
-
-                Button {
-                    model?.showDeleteConfirm = true
-                } label: {
-                    Label("Delete Graph", systemImage: "trash")
-                }
-                .help("Delete Graph")
-                .disabled(model?.isTimeTraveling ?? true || model?.selectedGraph == nil)
             }
 
             ToolbarItem(placement: .automatic) {
@@ -51,6 +43,21 @@ struct GraphView: View {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .help("Refresh")
+            }
+
+            if model?.selectedGraph != nil {
+                ToolbarItem(placement: .principal) {
+                    Picker("Mode", selection: Binding(
+                        get: { model?.graphMode ?? .nodes },
+                        set: { model?.graphMode = $0 }
+                    )) {
+                        ForEach(GraphPaneMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 320)
+                }
             }
         }
         .task(id: appState.reloadToken) {
@@ -118,25 +125,28 @@ struct GraphView: View {
 
     @ViewBuilder
     private func createGraphSheet(_ model: GraphFeatureModel) -> some View {
-        VStack(spacing: StrataSpacing.md) {
-            Text("Create Graph")
-                .font(.headline)
-
-            TextField("Graph Name", text: Binding(
-                get: { model.formGraphName },
-                set: { model.formGraphName = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-
-            Picker("Cascade Policy", selection: Binding(
-                get: { model.formCascadePolicy },
-                set: { model.formCascadePolicy = $0 }
-            )) {
-                Text("None").tag("none")
-                Text("Delete").tag("delete")
+        Form {
+            Section("Graph") {
+                TextField("Graph Name", text: Binding(
+                    get: { model.formGraphName },
+                    set: { model.formGraphName = $0 }
+                ))
             }
-            .pickerStyle(.segmented)
-
+            Section("Cascade Policy") {
+                Picker("Cascade Policy", selection: Binding(
+                    get: { model.formCascadePolicy },
+                    set: { model.formCascadePolicy = $0 }
+                )) {
+                    Text("None").tag("none")
+                    Text("Delete").tag("delete")
+                }
+                .pickerStyle(.segmented)
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Create Graph")
+        .frame(minWidth: StrataLayout.sheetMinWidth)
+        .safeAreaInset(edge: .bottom) {
             HStack {
                 Button("Cancel") {
                     model.showCreateSheet = false
@@ -149,11 +159,11 @@ struct GraphView: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
                 .disabled(model.formGraphName.isEmpty)
             }
+            .padding(StrataSpacing.lg)
         }
-        .padding(StrataSpacing.lg)
-        .frame(minWidth: StrataLayout.sheetMinWidth)
     }
 
     // MARK: - Right Pane
@@ -175,20 +185,6 @@ struct GraphView: View {
                     .padding(.vertical, StrataSpacing.xs)
                     Divider()
                 }
-
-                Picker("Mode", selection: Binding(
-                    get: { model.graphMode },
-                    set: { model.graphMode = $0 }
-                )) {
-                    ForEach(GraphPaneMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, StrataSpacing.md)
-                .padding(.vertical, StrataSpacing.xs)
-
-                Divider()
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: StrataSpacing.sm) {
@@ -250,59 +246,58 @@ struct GraphView: View {
             }
         }
 
-        Divider()
+        GroupBox("Add / Get Node") {
+            VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                HStack {
+                    TextField("Node ID", text: Binding(
+                        get: { model.nodeIdField },
+                        set: { model.nodeIdField = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    Button("Get") {
+                        Task { await model.getNode(nodeId: model.nodeIdField) }
+                    }
+                    .disabled(model.nodeIdField.isEmpty)
+                }
 
-        Text("Add / Get Node")
-            .strataSectionHeader()
+                TextField("Label (optional)", text: Binding(
+                    get: { model.nodeLabelField },
+                    set: { model.nodeLabelField = $0 }
+                ))
+                .textFieldStyle(.roundedBorder)
 
-        HStack {
-            TextField("Node ID", text: Binding(
-                get: { model.nodeIdField },
-                set: { model.nodeIdField = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            Button("Get") {
-                Task { await model.getNode(nodeId: model.nodeIdField) }
-            }
-            .disabled(model.nodeIdField.isEmpty)
-        }
+                Text("Properties (optional JSON object)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: Binding(
+                    get: { model.nodePropsField },
+                    set: { model.nodePropsField = $0 }
+                ))
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 60)
+                .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
+                .disabled(model.isTimeTraveling)
 
-        TextField("Label (optional)", text: Binding(
-            get: { model.nodeLabelField },
-            set: { model.nodeLabelField = $0 }
-        ))
-        .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Add Node") {
+                        Task { await model.addNode() }
+                    }
+                    .disabled(model.isTimeTraveling || model.nodeIdField.isEmpty)
 
-        Text("Properties (optional JSON object)")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        TextEditor(text: Binding(
-            get: { model.nodePropsField },
-            set: { model.nodePropsField = $0 }
-        ))
-        .font(.system(.body, design: .monospaced))
-        .frame(minHeight: 60)
-        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
-        .disabled(model.isTimeTraveling)
+                    Button("Remove Node") {
+                        Task { await model.removeNode(nodeId: model.nodeIdField) }
+                    }
+                    .disabled(model.isTimeTraveling || model.nodeIdField.isEmpty)
 
-        HStack {
-            Button("Add Node") {
-                Task { await model.addNode() }
-            }
-            .disabled(model.isTimeTraveling || model.nodeIdField.isEmpty)
-
-            Button("Remove Node") {
-                Task { await model.removeNode(nodeId: model.nodeIdField) }
-            }
-            .disabled(model.isTimeTraveling || model.nodeIdField.isEmpty)
-
-            Button("Refresh List") {
-                Task { await model.loadNodes() }
+                    Button("Refresh List") {
+                        Task { await model.loadNodes() }
+                    }
+                }
             }
         }
 
         if let error = model.nodeError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
 
         if let result = model.nodeResult {
@@ -325,67 +320,68 @@ struct GraphView: View {
                 .font(.callout)
         }
 
-        Text("Add Edge")
-            .strataSectionHeader()
+        GroupBox("Add Edge") {
+            VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                HStack {
+                    TextField("Source Node", text: Binding(
+                        get: { model.edgeSrc },
+                        set: { model.edgeSrc = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    TextField("Destination Node", text: Binding(
+                        get: { model.edgeDst },
+                        set: { model.edgeDst = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                }
+                .disabled(model.isTimeTraveling)
 
-        HStack {
-            TextField("Source Node", text: Binding(
-                get: { model.edgeSrc },
-                set: { model.edgeSrc = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            TextField("Destination Node", text: Binding(
-                get: { model.edgeDst },
-                set: { model.edgeDst = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-        }
-        .disabled(model.isTimeTraveling)
+                HStack {
+                    TextField("Edge Type", text: Binding(
+                        get: { model.edgeType },
+                        set: { model.edgeType = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    TextField("Weight (optional)", text: Binding(
+                        get: { model.edgeWeight },
+                        set: { model.edgeWeight = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 120)
+                }
+                .disabled(model.isTimeTraveling)
 
-        HStack {
-            TextField("Edge Type", text: Binding(
-                get: { model.edgeType },
-                set: { model.edgeType = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            TextField("Weight (optional)", text: Binding(
-                get: { model.edgeWeight },
-                set: { model.edgeWeight = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            .frame(maxWidth: 120)
-        }
-        .disabled(model.isTimeTraveling)
+                Text("Properties (optional JSON object)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: Binding(
+                    get: { model.edgePropsField },
+                    set: { model.edgePropsField = $0 }
+                ))
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 60)
+                .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
+                .disabled(model.isTimeTraveling)
 
-        Text("Properties (optional JSON object)")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        TextEditor(text: Binding(
-            get: { model.edgePropsField },
-            set: { model.edgePropsField = $0 }
-        ))
-        .font(.system(.body, design: .monospaced))
-        .frame(minHeight: 60)
-        .overlay(RoundedRectangle(cornerRadius: StrataRadius.md).stroke(.separator))
-        .disabled(model.isTimeTraveling)
+                HStack {
+                    Button("Add Edge") {
+                        Task { await model.addEdge() }
+                    }
+                    .disabled(model.isTimeTraveling || model.edgeSrc.isEmpty || model.edgeDst.isEmpty || model.edgeType.isEmpty)
 
-        HStack {
-            Button("Add Edge") {
-                Task { await model.addEdge() }
+                    Button("Remove Edge") {
+                        Task { await model.removeEdge() }
+                    }
+                    .disabled(model.isTimeTraveling || model.edgeSrc.isEmpty || model.edgeDst.isEmpty || model.edgeType.isEmpty)
+                }
             }
-            .disabled(model.isTimeTraveling || model.edgeSrc.isEmpty || model.edgeDst.isEmpty || model.edgeType.isEmpty)
-
-            Button("Remove Edge") {
-                Task { await model.removeEdge() }
-            }
-            .disabled(model.isTimeTraveling || model.edgeSrc.isEmpty || model.edgeDst.isEmpty || model.edgeType.isEmpty)
         }
 
         if let success = model.edgeSuccess {
-            Text(success).foregroundStyle(.green).font(.callout)
+            StrataSuccessCallout(message: success)
         }
         if let error = model.edgeError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
     }
 
@@ -424,7 +420,7 @@ struct GraphView: View {
         .disabled(model.neighborNodeId.isEmpty)
 
         if let error = model.neighborError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
 
         if !model.neighborResults.isEmpty {
@@ -507,7 +503,7 @@ struct GraphView: View {
         .disabled(model.bfsStart.isEmpty)
 
         if let error = model.bfsError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
 
         if let result = model.bfsResult {
@@ -578,10 +574,10 @@ struct GraphView: View {
         .disabled(model.isTimeTraveling || model.bulkJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         if let result = model.bulkResult {
-            Text(result).foregroundStyle(.green).font(.callout)
+            StrataSuccessCallout(message: result)
         }
         if let error = model.bulkError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
     }
 }

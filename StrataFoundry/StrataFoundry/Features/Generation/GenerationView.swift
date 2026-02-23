@@ -24,7 +24,18 @@ struct GenerationView: View {
         }
         .navigationTitle("Generation")
         .toolbar {
-            // Intentionally empty — generation doesn't need toolbar actions
+            ToolbarItem(placement: .principal) {
+                Picker("Mode", selection: Binding(
+                    get: { model?.generationMode ?? .generate },
+                    set: { model?.generationMode = $0 }
+                )) {
+                    ForEach(GenerationPaneMode.allCases, id: \.self) { m in
+                        Text(m.rawValue).tag(m)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 320)
+            }
         }
         .task(id: appState.reloadToken) {
             if model == nil, let services = appState.services {
@@ -39,20 +50,6 @@ struct GenerationView: View {
     @ViewBuilder
     private func generationContent(_ model: GenerationFeatureModel) -> some View {
         VStack(spacing: 0) {
-            Picker("Mode", selection: Binding(
-                get: { model.generationMode },
-                set: { model.generationMode = $0 }
-            )) {
-                ForEach(GenerationPaneMode.allCases, id: \.self) { m in
-                    Text(m.rawValue).tag(m)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, StrataSpacing.lg)
-            .padding(.vertical, StrataSpacing.xs)
-
-            Divider()
-
             ScrollView {
                 VStack(alignment: .leading, spacing: StrataSpacing.sm) {
                     switch model.generationMode {
@@ -166,7 +163,7 @@ struct GenerationView: View {
         }
 
         if let error = model.genError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
 
         if let result = model.genResult {
@@ -211,7 +208,7 @@ struct GenerationView: View {
         .disabled(model.tokText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         if let error = model.tokError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
 
         if let result = model.tokResult {
@@ -251,7 +248,7 @@ struct GenerationView: View {
         .disabled(model.detokIds.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         if let error = model.detokError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
 
         if let result = model.detokResult {
@@ -283,10 +280,10 @@ struct GenerationView: View {
         .disabled(model.unloadModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
         if let error = model.unloadError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
         if let result = model.unloadResult {
-            Text(result).foregroundStyle(.green).font(.callout)
+            StrataSuccessCallout(message: result)
         }
     }
 }

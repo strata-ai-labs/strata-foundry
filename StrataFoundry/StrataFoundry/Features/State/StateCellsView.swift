@@ -13,45 +13,25 @@ struct StateCellsView: View {
 
     @ToolbarContentBuilder
     private var stateToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button {
-                model?.showAddSheet = true
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                Button {
+                    model?.showAddSheet = true
+                } label: {
+                    Label("Add Cell", systemImage: "plus")
+                }
+                Button {
+                    model?.showBatchSheet = true
+                } label: {
+                    Label("Batch Import", systemImage: "square.and.arrow.down.on.square")
+                }
             } label: {
                 Label("Add Cell", systemImage: "plus")
+            } primaryAction: {
+                model?.showAddSheet = true
             }
             .help("Add Cell")
             .disabled(model?.isTimeTraveling ?? true)
-
-            Button {
-                model?.showBatchSheet = true
-            } label: {
-                Label("Batch Import", systemImage: "square.and.arrow.down.on.square")
-            }
-            .help("Batch Import")
-            .disabled(model?.isTimeTraveling ?? true)
-        }
-
-        ToolbarItem(placement: .automatic) {
-            Button {
-                if let cell = model?.selectedCell {
-                    model?.cellToDelete = cell
-                    model?.showDeleteConfirm = true
-                }
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            .help("Delete Cell")
-            .disabled(model?.isTimeTraveling ?? true || model?.selectedCell == nil)
-        }
-
-        ToolbarItem(placement: .automatic) {
-            Button {
-                withAnimation { model?.showInspector.toggle() }
-            } label: {
-                Label("Inspector", systemImage: "sidebar.trailing")
-            }
-            .help("Toggle Inspector (⌘⌃I)")
-            .keyboardShortcut("i", modifiers: [.command, .control])
         }
 
         ToolbarItem(placement: .automatic) {
@@ -78,6 +58,11 @@ struct StateCellsView: View {
             .navigationTitle("State Cells")
             .navigationSubtitle(model.map { "\($0.cells.count) cells" } ?? "")
             .toolbar { stateToolbar }
+            .background {
+                Button("") { withAnimation { model?.showInspector.toggle() } }
+                    .keyboardShortcut("i", modifiers: [.command, .control])
+                    .hidden()
+            }
             .task(id: appState.reloadToken) {
                 if model == nil, let services = appState.services {
                     model = StateFeatureModel(stateService: services.stateService, appState: appState)
@@ -280,28 +265,31 @@ struct StateCellsView: View {
 
     @ViewBuilder
     private func cellFormSheet(model: StateFeatureModel, isEditing: Bool) -> some View {
-        VStack(spacing: StrataSpacing.md) {
-            Text(isEditing ? "Edit Cell" : "Add Cell")
-                .font(.headline)
-
-            TextField("Cell Name", text: Binding(
-                get: { model.formCell },
-                set: { model.formCell = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            .disabled(isEditing)
-
-            StrataValueEditor(
-                valueText: Binding(
-                    get: { model.formValue },
-                    set: { model.formValue = $0 }
-                ),
-                valueType: Binding(
-                    get: { model.formValueType },
-                    set: { model.formValueType = $0 }
+        Form {
+            Section("Cell") {
+                TextField("Cell Name", text: Binding(
+                    get: { model.formCell },
+                    set: { model.formCell = $0 }
+                ))
+                .disabled(isEditing)
+            }
+            Section("Value") {
+                StrataValueEditor(
+                    valueText: Binding(
+                        get: { model.formValue },
+                        set: { model.formValue = $0 }
+                    ),
+                    valueType: Binding(
+                        get: { model.formValueType },
+                        set: { model.formValueType = $0 }
+                    )
                 )
-            )
-
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(isEditing ? "Edit Cell" : "Add Cell")
+        .frame(minWidth: StrataLayout.sheetMinWidth)
+        .safeAreaInset(edge: .bottom) {
             HStack {
                 Button("Cancel") {
                     model.showAddSheet = false
@@ -315,10 +303,10 @@ struct StateCellsView: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
                 .disabled(model.formCell.isEmpty)
             }
+            .padding(StrataSpacing.lg)
         }
-        .padding(StrataSpacing.lg)
-        .frame(minWidth: StrataLayout.sheetMinWidth)
     }
 }

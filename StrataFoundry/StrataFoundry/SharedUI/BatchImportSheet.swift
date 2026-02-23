@@ -31,39 +31,34 @@ struct BatchImportSheet: View {
     @State private var isImporting = false
 
     var body: some View {
-        VStack(spacing: StrataSpacing.md) {
-            Text(title)
-                .font(.headline)
-
-            TextEditor(text: $jsonText)
-                .font(.system(.body, design: .monospaced))
-                .frame(minHeight: 200)
-                .overlay(
-                    RoundedRectangle(cornerRadius: StrataRadius.md)
-                        .stroke(.separator, lineWidth: 1)
-                )
-                .overlay(alignment: .topLeading) {
-                    if jsonText.isEmpty {
-                        Text(placeholder)
-                            .foregroundStyle(.tertiary)
-                            .font(.system(.body, design: .monospaced))
-                            .padding(StrataSpacing.xs)
-                            .allowsHitTesting(false)
+        Form {
+            Section("JSON Data") {
+                TextEditor(text: $jsonText)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 200)
+                    .overlay(alignment: .topLeading) {
+                        if jsonText.isEmpty {
+                            Text(placeholder)
+                                .foregroundStyle(.tertiary)
+                                .font(.system(.body, design: .monospaced))
+                                .padding(StrataSpacing.xs)
+                                .allowsHitTesting(false)
+                        }
                     }
-                }
+            }
 
             if let error = errorMessage {
-                Text(error)
-                    .foregroundStyle(.red)
-                    .font(.callout)
+                StrataErrorCallout(message: error)
             }
 
             if let success = successMessage {
-                Text(success)
-                    .foregroundStyle(.green)
-                    .font(.callout)
+                StrataSuccessCallout(message: success)
             }
-
+        }
+        .formStyle(.grouped)
+        .navigationTitle(title)
+        .frame(minWidth: StrataLayout.sheetWideMinWidth, minHeight: 350)
+        .safeAreaInset(edge: .bottom) {
             HStack {
                 Button("Cancel") {
                     onDismiss()
@@ -89,9 +84,9 @@ struct BatchImportSheet: View {
                 }
                 .disabled(jsonText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isImporting)
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
             }
+            .padding(StrataSpacing.lg)
         }
-        .padding(StrataSpacing.lg)
-        .frame(minWidth: StrataLayout.sheetMinWidth + 60, minHeight: 350)
     }
 }

@@ -69,24 +69,10 @@ struct AdminView: View {
             Spacer()
 
             if let result = model.pingResult {
-                HStack(spacing: StrataSpacing.xxs) {
-                    Circle()
-                        .fill(.green)
-                        .frame(width: 8, height: 8)
-                    Text(result)
-                        .font(.callout)
-                        .foregroundStyle(.green)
-                }
+                StrataSuccessCallout(message: result)
             }
             if let error = model.pingError {
-                HStack(spacing: StrataSpacing.xxs) {
-                    Circle()
-                        .fill(.red)
-                        .frame(width: 8, height: 8)
-                    Text(error)
-                        .font(.callout)
-                        .foregroundStyle(.red)
-                }
+                StrataErrorCallout(message: error)
             }
 
             Button("Ping") {
@@ -109,7 +95,7 @@ struct AdminView: View {
         }
 
         if let error = model.configError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
 
         if let json = model.configJSON {
@@ -150,7 +136,7 @@ struct AdminView: View {
         }
 
         if let error = model.autoEmbedError {
-            Text(error).foregroundStyle(.red).font(.callout)
+            StrataErrorCallout(message: error)
         }
     }
 
@@ -158,46 +144,44 @@ struct AdminView: View {
 
     @ViewBuilder
     private func retentionSection(_ model: AdminFeatureModel) -> some View {
-        HStack {
-            Text("Retention / GC")
-                .strataSectionHeader()
-            Spacer()
-        }
+        GroupBox("Retention / GC") {
+            VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                HStack(spacing: StrataSpacing.sm) {
+                    Button("Run GC (RetentionApply)") {
+                        Task { await model.runRetention() }
+                    }
+                    Button("Stats") {
+                        Task { await model.loadRetentionStats() }
+                    }
+                    Button("Preview") {
+                        Task { await model.loadRetentionPreview() }
+                    }
+                }
 
-        HStack(spacing: StrataSpacing.sm) {
-            Button("Run GC (RetentionApply)") {
-                Task { await model.runRetention() }
-            }
-            Button("Stats") {
-                Task { await model.loadRetentionStats() }
-            }
-            Button("Preview") {
-                Task { await model.loadRetentionPreview() }
-            }
-        }
+                if let msg = model.retentionMessage {
+                    StrataSuccessCallout(message: msg)
+                }
+                if let error = model.retentionError {
+                    StrataErrorCallout(message: error)
+                }
 
-        if let msg = model.retentionMessage {
-            Text(msg).foregroundStyle(.green).font(.callout)
-        }
-        if let error = model.retentionError {
-            Text(error).foregroundStyle(.red).font(.callout)
-        }
+                if let stats = model.retentionStats {
+                    GroupBox("Retention Stats") {
+                        Text(stats)
+                            .strataCodeStyle()
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
 
-        if let stats = model.retentionStats {
-            GroupBox("Retention Stats") {
-                Text(stats)
-                    .strataCodeStyle()
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-
-        if let preview = model.retentionPreview {
-            GroupBox("Retention Preview") {
-                Text(preview)
-                    .strataCodeStyle()
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let preview = model.retentionPreview {
+                    GroupBox("Retention Preview") {
+                        Text(preview)
+                            .strataCodeStyle()
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
             }
         }
     }
@@ -206,46 +190,44 @@ struct AdminView: View {
 
     @ViewBuilder
     private func maintenanceSection(_ model: AdminFeatureModel) -> some View {
-        HStack {
-            Text("Maintenance")
-                .strataSectionHeader()
-            Spacer()
-        }
+        GroupBox("Maintenance") {
+            VStack(alignment: .leading, spacing: StrataSpacing.sm) {
+                HStack(spacing: StrataSpacing.sm) {
+                    Button("Flush") {
+                        Task { await model.runFlush() }
+                    }
 
-        HStack(spacing: StrataSpacing.sm) {
-            Button("Flush") {
-                Task { await model.runFlush() }
+                    Button("Compact") {
+                        Task { await model.runCompact() }
+                    }
+
+                    Button("Durability Counters") {
+                        Task { await model.loadDurabilityCounters() }
+                    }
+                }
+
+                if let msg = model.flushMessage {
+                    StrataSuccessCallout(message: msg)
+                }
+                if let msg = model.compactMessage {
+                    StrataSuccessCallout(message: msg)
+                }
+                if let error = model.maintenanceError {
+                    StrataErrorCallout(message: error)
+                }
+
+                if let counters = model.durabilityCounters {
+                    GroupBox("WAL / Durability Counters") {
+                        Text(counters)
+                            .strataCodeStyle()
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                if let error = model.durabilityError {
+                    StrataErrorCallout(message: error)
+                }
             }
-
-            Button("Compact") {
-                Task { await model.runCompact() }
-            }
-
-            Button("Durability Counters") {
-                Task { await model.loadDurabilityCounters() }
-            }
-        }
-
-        if let msg = model.flushMessage {
-            Text(msg).foregroundStyle(.green).font(.callout)
-        }
-        if let msg = model.compactMessage {
-            Text(msg).foregroundStyle(.green).font(.callout)
-        }
-        if let error = model.maintenanceError {
-            Text(error).foregroundStyle(.red).font(.callout)
-        }
-
-        if let counters = model.durabilityCounters {
-            GroupBox("WAL / Durability Counters") {
-                Text(counters)
-                    .strataCodeStyle()
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        if let error = model.durabilityError {
-            Text(error).foregroundStyle(.red).font(.callout)
         }
     }
 

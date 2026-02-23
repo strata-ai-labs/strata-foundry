@@ -29,33 +29,27 @@ struct JsonStoreView: View {
 
     @ToolbarContentBuilder
     private var jsonToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button {
-                model?.prepareAddForm()
-                model?.showAddSheet = true
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                Button {
+                    model?.prepareAddForm()
+                    model?.showAddSheet = true
+                } label: {
+                    Label("Add Document", systemImage: "plus")
+                }
+                Button {
+                    model?.showBatchSheet = true
+                } label: {
+                    Label("Batch Import", systemImage: "square.and.arrow.down.on.square")
+                }
             } label: {
                 Label("Add Document", systemImage: "plus")
+            } primaryAction: {
+                model?.prepareAddForm()
+                model?.showAddSheet = true
             }
             .help("Add Document")
             .disabled(model?.isTimeTraveling ?? true)
-
-            Button {
-                model?.showBatchSheet = true
-            } label: {
-                Label("Batch Import", systemImage: "square.and.arrow.down.on.square")
-            }
-            .help("Batch Import")
-            .disabled(model?.isTimeTraveling ?? true)
-        }
-
-        ToolbarItem(placement: .automatic) {
-            Button {
-                model?.showDeleteConfirm = true
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            .help("Delete Document")
-            .disabled(model?.isTimeTraveling ?? true || model?.selectedKey == nil)
         }
 
         ToolbarItem(placement: .automatic) {
@@ -204,32 +198,27 @@ struct JsonStoreView: View {
 
     @ViewBuilder
     private func jsonFormSheet(model: JsonFeatureModel, isEditing: Bool) -> some View {
-        VStack(spacing: StrataSpacing.md) {
-            Text(isEditing ? "Edit Document" : "Add Document")
-                .font(.headline)
-
-            TextField("Key", text: Binding(
-                get: { model.formKey },
-                set: { model.formKey = $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
-            .disabled(isEditing)
-
-            Text("Value (Strata Value JSON)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            TextEditor(text: Binding(
-                get: { model.formJSON },
-                set: { model.formJSON = $0 }
-            ))
-            .font(.system(.body, design: .monospaced))
-            .frame(minHeight: 200)
-            .overlay(
-                RoundedRectangle(cornerRadius: StrataRadius.md)
-                    .stroke(.separator, lineWidth: 1)
-            )
-
+        Form {
+            Section("Document") {
+                TextField("Key", text: Binding(
+                    get: { model.formKey },
+                    set: { model.formKey = $0 }
+                ))
+                .disabled(isEditing)
+            }
+            Section("Value (Strata Value JSON)") {
+                TextEditor(text: Binding(
+                    get: { model.formJSON },
+                    set: { model.formJSON = $0 }
+                ))
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 200)
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(isEditing ? "Edit Document" : "Add Document")
+        .frame(minWidth: StrataLayout.sheetMinWidth, minHeight: 350)
+        .safeAreaInset(edge: .bottom) {
             HStack {
                 Button("Cancel") {
                     model.showAddSheet = false
@@ -243,10 +232,10 @@ struct JsonStoreView: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
                 .disabled(model.formKey.isEmpty || model.formJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+            .padding(StrataSpacing.lg)
         }
-        .padding(StrataSpacing.lg)
-        .frame(minWidth: 450, minHeight: 350)
     }
 }
