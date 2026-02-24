@@ -25,8 +25,11 @@ final class AppState {
     /// Info about the open database.
     var databaseInfo: StrataDatabaseInfo?
 
-    /// Trigger the Open Database panel.
+    /// Trigger the Open Database panel (direct open, no config sheet).
     var showOpenPanel = false
+
+    /// Trigger the Open Database panel with advanced options (config sheet).
+    var showAdvancedOpenPanel = false
 
     /// Trigger the Create Database panel.
     var showCreatePanel = false

@@ -47,8 +47,14 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 0.15), value: workspace.activeSessionId)
         .onChange(of: workspace.showOpenPanel) { _, show in
             if show {
-                openDatabasePanel()
                 workspace.showOpenPanel = false
+                openDatabaseDirect()
+            }
+        }
+        .onChange(of: workspace.showAdvancedOpenPanel) { _, show in
+            if show {
+                workspace.showAdvancedOpenPanel = false
+                openDatabaseAdvanced()
             }
         }
         .onChange(of: workspace.showCreatePanel) { _, show in
@@ -60,7 +66,13 @@ struct ContentView: View {
         .onChange(of: workspace.activeSession?.appState.showOpenPanel ?? false) { _, show in
             if show {
                 workspace.activeSession?.appState.showOpenPanel = false
-                openDatabasePanel()
+                openDatabaseDirect()
+            }
+        }
+        .onChange(of: workspace.activeSession?.appState.showAdvancedOpenPanel ?? false) { _, show in
+            if show {
+                workspace.activeSession?.appState.showAdvancedOpenPanel = false
+                openDatabaseAdvanced()
             }
         }
         .onChange(of: workspace.activeSession?.appState.showCreatePanel ?? false) { _, show in
@@ -321,7 +333,31 @@ struct ContentView: View {
 
     // MARK: - File Panels
 
-    private func openDatabasePanel() {
+    /// Open database directly (no config sheet).
+    private func openDatabaseDirect() {
+        DispatchQueue.main.async {
+            let panel = NSOpenPanel()
+            panel.title = "Open Strata Database"
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.message = "Select the folder containing your .strata database"
+
+            if panel.runModal() == .OK, let url = panel.url {
+                let strataURL = url.lastPathComponent == ".strata"
+                    ? url
+                    : url.appendingPathComponent(".strata")
+                let path = strataURL.path
+                let ws = workspace
+                Task {
+                    await ws.openDatabase(at: path)
+                }
+            }
+        }
+    }
+
+    /// Open database with advanced options (shows config sheet).
+    private func openDatabaseAdvanced() {
         DispatchQueue.main.async {
             let panel = NSOpenPanel()
             panel.title = "Open Strata Database"

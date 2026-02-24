@@ -237,19 +237,12 @@ struct DatabaseView: View {
                 .font(.system(size: 32))
                 .foregroundStyle(.secondary)
 
-            Button("Open Database...") {
-                appState.showOpenPanel = true
-            }
-            .keyboardShortcut("o", modifiers: .command)
-
-            Button("New Database...") {
-                appState.showCreatePanel = true
-            }
-            .keyboardShortcut("n", modifiers: [.command, .shift])
+            Text("Strata Foundry")
+                .font(.headline)
+                .foregroundStyle(.secondary)
 
             Spacer()
         }
-        .buttonStyle(.bordered)
         .frame(maxWidth: .infinity)
         .navigationSplitViewColumnWidth(min: 180, ideal: StrataLayout.sidebarIdealWidth)
         .toolbar(removing: .sidebarToggle)
@@ -272,7 +265,13 @@ struct DatabaseView: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: StrataSpacing.md) {
-                Button("Open Database...") {
+                Menu {
+                    Button("Open with Advanced Options...") {
+                        appState.showAdvancedOpenPanel = true
+                    }
+                } label: {
+                    Text("Open Database...")
+                } primaryAction: {
                     appState.showOpenPanel = true
                 }
 
@@ -329,7 +328,7 @@ struct DatabaseView: View {
             }
 
             DisclosureGroup(isExpanded: $isToolsExpanded) {
-                ForEach(TopLevelItem.allCases) { item in
+                ForEach(TopLevelItem.allCases.filter { $0 != .search }) { item in
                     Label {
                         Text(item.rawValue)
                     } icon: {
